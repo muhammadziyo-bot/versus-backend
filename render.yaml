@@ -1,0 +1,40 @@
+# Render deployment configuration for versus-backend
+# https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: versus-backend
+    runtime: python
+    plan: free
+    region: oregon  # Choose region closest to your users
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn start:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: versus-db
+          property: connectionString
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 600
+      - key: DEBUG
+        value: "false"
+      - key: CORS_ORIGINS
+        value: https://versus-frontend.netlify.app
+      - key: REDIS_URL
+        value: redis://localhost:6379/0
+    healthCheckPath: /health
+
+databases:
+  - name: versus-db
+    databaseName: versus
+    user: versus
