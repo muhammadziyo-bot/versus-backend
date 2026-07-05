@@ -1,40 +1,108 @@
-# Render deployment configuration for versus-backend
+# Render deployment configuration for Digital Arena Backend
+# Using EXTERNAL Supabase PostgreSQL (not Render managed DB)
 # https://render.com/docs/yaml-spec
 
 services:
   - type: web
-    name: versus-backend
+    name: digital-arena-backend
     runtime: python
     plan: free
-    region: oregon  # Choose region closest to your users
+    region: frankfurt  # Options: oregon (US West), ohio (US East), frankfurt (EU), singapore (Asia)
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn start:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    
     envVars:
+      # =============================================================================
+      # REQUIRED: Supabase PostgreSQL Connection String
+      # Get from: Supabase Dashboard > Project Settings > Database > Connection String > URI
+      # Format: postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+      # =============================================================================
       - key: DATABASE_URL
-        fromDatabase:
-          name: versus-db
-          property: connectionString
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+        sync: false  # SET THIS MANUALLY in Render Dashboard after first deploy!
+      
+      # =============================================================================
+      # JWT Configuration (for authentication tokens)
+      # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+      # =============================================================================
       - key: SECRET_KEY
-        generateValue: true
+        generateValue: true  # Render auto-generates a secure random secret
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 600
+        value: 60  # 1 hour for production (more secure)
+      
+      # =============================================================================
+      # Application Configuration
+      # =============================================================================
       - key: DEBUG
-        value: "false"
+        value: "false"  # NEVER true in production!
+      
+      # CORS Origins: Your frontend URL(s) in JSON array format
+      # Examples: ["https://your-app.vercel.app"] or ["https://app1.com", "https://app2.com"]
       - key: CORS_ORIGINS
-        value: https://versus-frontend.netlify.app
+        sync: false  # SET THIS MANUALLY: ["https://your-frontend-url.com"]
+      
+      # =============================================================================
+      # OPTIONAL: Supabase Client Configuration
+      # Get from: Supabase Dashboard > Project Settings > API
+      # =============================================================================
+      - key: SUPABASE_URL
+        sync: false  # https://your-project.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false  # eyJhbGciOiJIUzI1NiIs...
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false  # ⚠️ KEEP SECRET! Never expose to frontend!
+      
+      # =============================================================================
+      # OPTIONAL: Redis (for caching, matchmaking, sessions)
+      # Services: Redis Cloud (free tier), Upstash, AWS ElastiCache, etc.
+      # =============================================================================
       - key: REDIS_URL
-        value: redis://localhost:6379/0
+        sync: false  # redis://username:password@host:port/0
+      
+      # =============================================================================
+      # OPTIONAL: Error Tracking (Sentry)
+      # Get DSN from: https://sentry.io/settings/projects/your-project/keys/
+      # =============================================================================
+      - key: SENTRY_DSN
+        sync: false  # https://xxx@xxx.ingest.sentry.io/xxx
+      
+      # =============================================================================
+      # OPTIONAL: Telegram Bot (for notifications)
+      # Get token from @BotFather on Telegram
+      # =============================================================================
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false  # 123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+    
+    # Health check endpoint (Render uses this to verify app is running)
     healthCheckPath: /health
+    
+    # Auto-deploy when you push to git (disable if you want manual deploys)
+    autoDeploy: true
 
-databases:
-  - name: versus-db
-    databaseName: versus
-    user: versus
+# =============================================================================
+# IMPORTANT NOTES:
+# =============================================================================
+#
+# 1. NO RENDER MANAGED DATABASE:
+#    We're using EXTERNAL Supabase PostgreSQL, NOT Render's managed database.
+#
+# 2. DATABASE_URL IS REQUIRED:
+#    You MUST set DATABASE_URL manually in Render Dashboard after first deploy!
+#
+# 3. FOR LOCAL DEVELOPMENT:
+#    Use docker-compose.yml (see project root) for local PostgreSQL/Redis.
+#
+# 4. MIGRATIONS:
+#    After first deploy, run: alembic upgrade head
+#    (via Render Dashboard > Shell tab)
+#
+# 5. CORS_ORIGINS:
+#    Set this to your frontend URL (e.g., https://your-app.vercel.app)
+#    Format must be valid JSON array: ["https://your-app.com"]
+#
+# =============================================================================
+
+# NO DATABASES SECTION HERE - Using external Supabase!
+# databases:
+#   - name: ...  # <-- DO NOT ADD THIS!

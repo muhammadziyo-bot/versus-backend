@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
+import asyncio
 from app.models.debate import Debate, Argument, BattleRoom, Vote, BattleRound, EloHistory
 from app.models.user import User
 from app.schemas.debate import DebateCreate, DebateList, DebateResponse
@@ -173,17 +174,23 @@ class DebateService:
             raise ValueError("Round not found")
         
         # Determine which side the user is on and submit argument
+        side = None
         if user_id == battle_room.pro_user_id:
             round_obj.pro_argument = argument
             round_obj.pro_submitted_at = datetime.utcnow()
+            side = "pro"
         else:
             round_obj.con_argument = argument
             round_obj.con_submitted_at = datetime.utcnow()
+            side = "con"
         
         # Check if both arguments are submitted
         if round_obj.pro_argument and round_obj.con_argument:
             round_obj.status = "completed"
             round_obj.completed_at = datetime.utcnow()
+            
+            # Trigger AI scoring for both arguments in background
+            self._trigger_ai_scoring(battle_room_id, round_obj.id)
             
             # Auto-advance to next round or end battle
             self._advance_round_or_end_battle(battle_room_id)
@@ -215,8 +222,10 @@ class DebateService:
                 next_round.status = "active"
                 next_round.started_at = datetime.utcnow()
         else:
-            # End the battle
+            # End the battle and trigger AI result calculation
             self.end_battle(battle_room_id)
+            # Trigger AI result calculation in background
+            self._trigger_ai_result_calculation(battle_room_id)
     
     def end_battle(self, battle_room_id: int):
         """End a battle and determine winner"""
@@ -363,3 +372,74 @@ class DebateService:
     def get_battle_votes(self, battle_room_id: int) -> list:
         """Get all votes for a battle"""
         return self.db.query(Vote).filter(Vote.battle_room_id == battle_room_id).all()
+    
+    def _trigger_ai_scoring(self, battle_room_id: int, round_id: int):
+        """Trigger AI scoring for a completed round in background"""
+        try:
+            from app.services.ai_scoring_service import AIScoringService
+            
+            def score_arguments():
+                # Create new DB session for background task
+                from app.database import SessionLocal
+                db = SessionLocal()
+                try:
+                    ai_service = AIScoringService(db)
+                    
+                    # Get round and battle room
+                    round_obj = self.db.query(BattleRound).filter(BattleRound.id == round_id).first()
+                    battle_room = self.db.query(BattleRoom).filter(BattleRoom.id == battle_room_id).first()
+                    debate = self.db.query(Debate).filter(Debate.id == battle_room.debate_id).first()
+                    
+                    if round_obj and battle_room and debate:
+                        # Score pro argument
+                        if round_obj.pro_argument:
+                            ai_service.score_argument(
+                                round_id, "pro", round_obj.pro_argument, debate.title
+                            )
+                        
+                        # Score con argument
+                        if round_obj.con_argument:
+                            ai_service.score_argument(
+                                round_id, "con", round_obj.con_argument, debate.title
+                            )
+                finally:
+                    db.close()
+            
+            # Run in background thread
+            import threading
+            thread = threading.Thread(target=score_arguments)
+            thread.daemon = True
+            thread.start()
+            
+        except Exception as e:
+            print(f"Error triggering AI scoring: {e}")
+    
+    def _trigger_ai_result_calculation(self, battle_room_id: int):
+        """Trigger AI result calculation in background with delay"""
+        try:
+            from app.services.ai_scoring_service import AIScoringService
+            
+            def calculate_delayed_result():
+                # Wait 60-90 seconds before calculating results
+                import time
+                import random
+                delay = random.uniform(60, 90)
+                time.sleep(delay)
+                
+                # Create new DB session for background task
+                from app.database import SessionLocal
+                db = SessionLocal()
+                try:
+                    ai_service = AIScoringService(db)
+                    ai_service.calculate_battle_result(battle_room_id)
+                finally:
+                    db.close()
+            
+            # Run in background thread
+            import threading
+            thread = threading.Thread(target=calculate_delayed_result)
+            thread.daemon = True
+            thread.start()
+            
+        except Exception as e:
+            print(f"Error triggering AI result calculation: {e}")

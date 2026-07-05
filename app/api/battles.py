@@ -6,6 +6,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.services.debate_service import DebateService
+from app.services.ai_scoring_service import AIScoringService
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
 from app.models.debate import Debate
@@ -171,6 +172,58 @@ class VoteResponse(BaseModel):
 
     @field_serializer('created_at')
     def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+
+    class Config:
+        from_attributes = True
+
+class AIArgumentScoreResponse(BaseModel):
+    id: int
+    battle_round_id: int
+    side: str
+    logical_coherence: int
+    evidence_quality: int
+    clarity: int
+    relevance: int
+    counter_effectiveness: int
+    overall_score: int
+    strengths: Optional[str] = None
+    weaknesses: Optional[str] = None
+    detailed_feedback: Optional[str] = None
+    model_used: Optional[str] = None
+    scored_at: datetime
+
+    @field_serializer('scored_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+
+    class Config:
+        from_attributes = True
+
+class AIBattleResultResponse(BaseModel):
+    id: int
+    battle_room_id: int
+    pro_total_score: int
+    con_total_score: int
+    winner_side: Optional[str] = None
+    confidence: int
+    pro_strengths: Optional[str] = None
+    pro_weaknesses: Optional[str] = None
+    con_strengths: Optional[str] = None
+    con_weaknesses: Optional[str] = None
+    overall_analysis: Optional[str] = None
+    round_breakdown: Optional[dict] = None
+    status: str
+    error_message: Optional[str] = None
+    model_used: Optional[str] = None
+    processing_started_at: Optional[datetime] = None
+    processing_completed_at: Optional[datetime] = None
+    created_at: datetime
+
+    @field_serializer('processing_started_at', 'processing_completed_at', 'created_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
         return value.isoformat()
 
     class Config:
@@ -456,3 +509,64 @@ def get_battle_stats(
         "completed_battles": 0,
         "message": "Battle statistics coming soon!"
     }
+
+@router.get("/{battle_id}/ai-result", response_model=AIBattleResultResponse)
+def get_ai_battle_result(
+    battle_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get AI battle result for a completed battle"""
+    # Verify battle exists and user is part of it
+    debate_service = DebateService(db)
+    battle_room = debate_service.get_battle_room(battle_id)
+    if not battle_room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Battle room not found"
+        )
+    
+    if current_user.id not in [battle_room.pro_user_id, battle_room.con_user_id]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not part of this battle"
+        )
+    
+    ai_service = AIScoringService(db)
+    ai_result = ai_service.get_battle_result(battle_id)
+    
+    if not ai_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AI result not available yet"
+        )
+    
+    return ai_result
+
+@router.get("/{battle_id}/rounds/{round_id}/ai-scores", response_model=List[AIArgumentScoreResponse])
+def get_round_ai_scores(
+    battle_id: int,
+    round_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get AI scores for a specific round"""
+    # Verify battle exists and user is part of it
+    debate_service = DebateService(db)
+    battle_room = debate_service.get_battle_room(battle_id)
+    if not battle_room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Battle room not found"
+        )
+    
+    if current_user.id not in [battle_room.pro_user_id, battle_room.con_user_id]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not part of this battle"
+        )
+    
+    ai_service = AIScoringService(db)
+    scores = ai_service.get_argument_scores(round_id)
+    
+    return scores
