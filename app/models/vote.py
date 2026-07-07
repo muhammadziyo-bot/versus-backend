@@ -7,7 +7,7 @@ class DiscussionVote(Base):
     __tablename__ = "discussion_votes"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
     discussion_id = Column(Integer, ForeignKey("club_discussions.id"), nullable=False)
     vote_type = Column(String, nullable=False)  # 'up' or 'down'
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -22,7 +22,7 @@ class CommentVote(Base):
     __tablename__ = "comment_votes"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
     comment_id = Column(Integer, ForeignKey("club_comments.id"), nullable=False)
     vote_type = Column(String, nullable=False)  # 'up' or 'down'
     created_at = Column(DateTime(timezone=True), server_default=func.now())

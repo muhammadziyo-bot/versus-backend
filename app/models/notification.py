@@ -7,7 +7,7 @@ class Notification(Base):
     __tablename__ = "notifications"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("app_users.id"))
     type = Column(String, nullable=False)  # battle_invite, discussion_reply, club_invite, etc.
     title = Column(String, nullable=False)
     message = Column(Text)

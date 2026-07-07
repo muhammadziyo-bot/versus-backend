@@ -7,8 +7,8 @@ class FriendRequest(Base):
     __tablename__ = "friend_requests"
     
     id = Column(Integer, primary_key=True, index=True)
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
     status = Column(String, default="pending")  # pending, accepted, rejected
     message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -22,8 +22,8 @@ class Friend(Base):
     __tablename__ = "friends"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    friend_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
+    friend_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships

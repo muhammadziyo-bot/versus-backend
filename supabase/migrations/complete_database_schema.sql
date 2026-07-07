@@ -1,5 +1,6 @@
--- Initial database schema for Versus
+-- Complete database schema for Versus
 -- Run this in Supabase SQL Editor after creating your project
+-- This includes all tables, indexes, and AI scoring functionality
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -39,6 +40,8 @@ CREATE INDEX idx_users_email ON app_users(email);
 CREATE INDEX idx_users_username ON app_users(username);
 CREATE INDEX idx_users_telegram_username ON app_users(telegram_username);
 CREATE INDEX idx_users_telegram_chat_id ON app_users(telegram_chat_id);
+CREATE INDEX idx_users_created_at ON app_users(created_at);
+CREATE INDEX idx_users_elo_rating ON app_users(elo_rating);
 
 -- Clubs table
 CREATE TABLE clubs (
@@ -52,6 +55,11 @@ CREATE TABLE clubs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE
 );
+
+-- Create indexes for clubs
+CREATE INDEX idx_clubs_founder_id ON clubs(founder_id);
+CREATE INDEX idx_clubs_category ON clubs(category);
+CREATE INDEX idx_clubs_created_at ON clubs(created_at);
 
 -- Club members association table
 CREATE TABLE club_members (
@@ -77,6 +85,12 @@ CREATE TABLE club_discussions (
     updated_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Create indexes for club discussions
+CREATE INDEX idx_club_discussions_author_id ON club_discussions(author_id);
+CREATE INDEX idx_club_discussions_club_id ON club_discussions(club_id);
+CREATE INDEX idx_club_discussions_created_at ON club_discussions(created_at);
+CREATE INDEX idx_club_discussions_updated_at ON club_discussions(updated_at);
+
 -- Club comments table
 CREATE TABLE club_comments (
     id SERIAL PRIMARY KEY,
@@ -89,6 +103,40 @@ CREATE TABLE club_comments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create indexes for club comments
+CREATE INDEX idx_club_comments_discussion_id ON club_comments(discussion_id);
+CREATE INDEX idx_club_comments_author_id ON club_comments(author_id);
+CREATE INDEX idx_club_comments_parent_id ON club_comments(parent_id);
+CREATE INDEX idx_club_comments_created_at ON club_comments(created_at);
+
+-- Discussion votes table
+CREATE TABLE discussion_votes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
+    discussion_id INTEGER REFERENCES club_discussions(id) ON DELETE CASCADE,
+    vote_type VARCHAR(10) NOT NULL, -- 'up' or 'down'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, discussion_id)
+);
+
+-- Create indexes for discussion votes
+CREATE INDEX idx_discussion_votes_user_id ON discussion_votes(user_id);
+CREATE INDEX idx_discussion_votes_discussion_id ON discussion_votes(discussion_id);
+
+-- Comment votes table
+CREATE TABLE comment_votes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
+    comment_id INTEGER REFERENCES club_comments(id) ON DELETE CASCADE,
+    vote_type VARCHAR(10) NOT NULL, -- 'up' or 'down'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, comment_id)
+);
+
+-- Create indexes for comment votes
+CREATE INDEX idx_comment_votes_user_id ON comment_votes(user_id);
+CREATE INDEX idx_comment_votes_comment_id ON comment_votes(comment_id);
+
 -- Debates table
 CREATE TABLE debates (
     id SERIAL PRIMARY KEY,
@@ -100,6 +148,11 @@ CREATE TABLE debates (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE
 );
+
+-- Create indexes for debates
+CREATE INDEX idx_debates_creator_id ON debates(created_by);
+CREATE INDEX idx_debates_status ON debates(status);
+CREATE INDEX idx_debates_created_at ON debates(created_at);
 
 -- Arguments table
 CREATE TABLE arguments (
@@ -150,7 +203,6 @@ CREATE TABLE votes (
     evidence INTEGER DEFAULT 5,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
     UNIQUE(battle_room_id, voter_id)
 );
 
@@ -171,9 +223,73 @@ CREATE TABLE battle_rounds (
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
     UNIQUE(battle_room_id, round_number)
 );
+
+-- AI Argument Scores table
+CREATE TABLE ai_argument_scores (
+    id SERIAL PRIMARY KEY,
+    battle_round_id INTEGER REFERENCES battle_rounds(id) ON DELETE CASCADE,
+    side VARCHAR(10) NOT NULL, -- "pro" or "con"
+    
+    -- AI scoring criteria (1-10 scale)
+    logical_coherence INTEGER DEFAULT 5,
+    evidence_quality INTEGER DEFAULT 5,
+    clarity INTEGER DEFAULT 5,
+    relevance INTEGER DEFAULT 5,
+    counter_effectiveness INTEGER DEFAULT 5,
+    
+    -- Overall score and analysis
+    overall_score INTEGER DEFAULT 5,
+    strengths TEXT,
+    weaknesses TEXT,
+    detailed_feedback TEXT,
+    
+    -- Metadata
+    model_used VARCHAR(100),
+    scored_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for AI argument scores
+CREATE INDEX idx_ai_argument_scores_battle_round_id ON ai_argument_scores(battle_round_id);
+CREATE INDEX idx_ai_argument_scores_side ON ai_argument_scores(side);
+
+-- AI Battle Results table
+CREATE TABLE ai_battle_results (
+    id SERIAL PRIMARY KEY,
+    battle_room_id INTEGER REFERENCES battle_rooms(id) ON DELETE CASCADE,
+    
+    -- Final scores
+    pro_total_score INTEGER DEFAULT 0,
+    con_total_score INTEGER DEFAULT 0,
+    winner_side VARCHAR(10),
+    confidence INTEGER DEFAULT 5,
+    
+    -- Detailed breakdown
+    pro_strengths TEXT,
+    pro_weaknesses TEXT,
+    con_strengths TEXT,
+    con_weaknesses TEXT,
+    overall_analysis TEXT,
+    
+    -- Round-by-round breakdown
+    round_breakdown JSONB,
+    
+    -- Processing status
+    status VARCHAR(50) DEFAULT 'pending',
+    error_message TEXT,
+    
+    -- Metadata
+    model_used VARCHAR(100),
+    processing_started_at TIMESTAMP WITH TIME ZONE,
+    processing_completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for AI battle results
+CREATE INDEX idx_ai_battle_results_battle_room_id ON ai_battle_results(battle_room_id);
+CREATE INDEX idx_ai_battle_results_status ON ai_battle_results(status);
+CREATE INDEX idx_ai_battle_results_winner_side ON ai_battle_results(winner_side);
 
 -- Elo history table
 CREATE TABLE elo_history (
@@ -186,17 +302,33 @@ CREATE TABLE elo_history (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create index for elo history
+CREATE INDEX idx_elo_history_user_id ON elo_history(user_id);
+
+-- Friend requests table
+CREATE TABLE friend_requests (
+    id SERIAL PRIMARY KEY,
+    sender_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
+    receiver_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'pending',
+    message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
 -- Friends table
 CREATE TABLE friends (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
     friend_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
-    status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
     UNIQUE(user_id, friend_id),
     CHECK (user_id != friend_id)
 );
+
+-- Create indexes for friends
+CREATE INDEX idx_friends_user_id ON friends(user_id);
+CREATE INDEX idx_friends_friend_id ON friends(friend_id);
 
 -- Notifications table
 CREATE TABLE notifications (
@@ -210,14 +342,15 @@ CREATE TABLE notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for performance
+-- Create indexes for notifications
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_created_at ON notifications(created_at);
+CREATE INDEX idx_notifications_is_read ON notifications(is_read);
+
+-- Additional performance indexes
 CREATE INDEX idx_battle_rooms_status ON battle_rooms(status);
 CREATE INDEX idx_battle_rooms_debate ON battle_rooms(debate_id);
 CREATE INDEX idx_votes_battle_room ON votes(battle_room_id);
-CREATE INDEX idx_notifications_user ON notifications(user_id);
-CREATE INDEX idx_notifications_read ON notifications(is_read);
-CREATE INDEX idx_friends_user ON friends(user_id);
-CREATE INDEX idx_friends_friend ON friends(friend_id);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -239,4 +372,7 @@ CREATE TRIGGER update_club_discussions_updated_at BEFORE UPDATE ON club_discussi
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_debates_updated_at BEFORE UPDATE ON debates
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_friend_requests_updated_at BEFORE UPDATE ON friend_requests
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

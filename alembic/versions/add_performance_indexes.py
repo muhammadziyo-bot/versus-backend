@@ -34,8 +34,8 @@ def upgrade():
     op.create_index('ix_clubs_created_at', 'clubs', ['created_at'])
     
     # Users indexes (email and username already indexed)
-    op.create_index('ix_users_created_at', 'users', ['created_at'])
-    op.create_index('ix_users_elo_rating', 'users', ['elo_rating'])
+    op.create_index('ix_users_created_at', 'app_users', ['created_at'])
+    op.create_index('ix_users_elo_rating', 'app_users', ['elo_rating'])
     
     # Debates indexes
     op.create_index('ix_debates_creator_id', 'debates', ['creator_id'])
@@ -74,8 +74,8 @@ def downgrade():
     op.drop_index('ix_debates_created_at', table_name='debates')
     op.drop_index('ix_debates_status', table_name='debates')
     op.drop_index('ix_debates_creator_id', table_name='debates')
-    op.drop_index('ix_users_elo_rating', table_name='users')
-    op.drop_index('ix_users_created_at', table_name='users')
+    op.drop_index('ix_users_elo_rating', table_name='app_users')
+    op.drop_index('ix_users_created_at', table_name='app_users')
     op.drop_index('ix_clubs_created_at', table_name='clubs')
     op.drop_index('ix_clubs_category', table_name='clubs')
     op.drop_index('ix_clubs_founder_id', table_name='clubs')

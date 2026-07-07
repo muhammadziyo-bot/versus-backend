@@ -11,7 +11,7 @@ class Debate(Base):
     description = Column(Text)
     category = Column(String)
     status = Column(String, default="active")  # active, completed, cancelled
-    created_by = Column(Integer, ForeignKey("users.id"))
+    created_by = Column(Integer, ForeignKey("app_users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -26,7 +26,7 @@ class Argument(Base):
     id = Column(Integer, primary_key=True, index=True)
     text = Column(Text, nullable=False)
     side = Column(String, nullable=False)  # pro, con
-    author_id = Column(Integer, ForeignKey("users.id"))
+    author_id = Column(Integer, ForeignKey("app_users.id"))
     debate_id = Column(Integer, ForeignKey("debates.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -39,8 +39,8 @@ class BattleRoom(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     debate_id = Column(Integer, ForeignKey("debates.id"))
-    pro_user_id = Column(Integer, ForeignKey("users.id"))
-    con_user_id = Column(Integer, ForeignKey("users.id"))
+    pro_user_id = Column(Integer, ForeignKey("app_users.id"))
+    con_user_id = Column(Integer, ForeignKey("app_users.id"))
     status = Column(String, default="waiting")  # waiting, active, completed
     current_round = Column(Integer, default=1)
     max_rounds = Column(Integer, default=3)
@@ -55,7 +55,7 @@ class BattleRoom(Base):
     
     # Battle results
     winner_side = Column(String)  # "pro", "con", "draw"
-    winner_user_id = Column(Integer, ForeignKey("users.id"))
+    winner_user_id = Column(Integer, ForeignKey("app_users.id"))
     
     # Relationships
     debate = relationship("Debate", back_populates="battle_rooms")
@@ -68,7 +68,7 @@ class Vote(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     battle_room_id = Column(Integer, ForeignKey("battle_rooms.id"))
-    voter_id = Column(Integer, ForeignKey("users.id"))
+    voter_id = Column(Integer, ForeignKey("app_users.id"))
     side = Column(String, nullable=False)  # pro, con
     
     # Enhanced voting criteria
@@ -111,7 +111,7 @@ class EloHistory(Base):
     __tablename__ = "elo_history"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("app_users.id"), nullable=False)
     battle_room_id = Column(Integer, ForeignKey("battle_rooms.id"), nullable=True)
     old_elo = Column(Integer, nullable=False)
     new_elo = Column(Integer, nullable=False)

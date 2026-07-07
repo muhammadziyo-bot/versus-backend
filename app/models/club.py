@@ -8,7 +8,7 @@ club_members = Table(
     'club_members',
     Base.metadata,
     Column('club_id', Integer, ForeignKey('clubs.id'), primary_key=True),
-    Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
+    Column('user_id', Integer, ForeignKey('app_users.id'), primary_key=True),
     Column('joined_at', DateTime(timezone=True), server_default=func.now()),
     Column('is_admin', Boolean, default=False)
 )
@@ -21,7 +21,7 @@ class Club(Base):
     description = Column(Text)
     category = Column(String)
     badge = Column(String, default="🤖")
-    founder_id = Column(Integer, ForeignKey("users.id"))
+    founder_id = Column(Integer, ForeignKey("app_users.id"))
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -37,7 +37,7 @@ class ClubDiscussion(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
-    author_id = Column(Integer, ForeignKey("users.id"))
+    author_id = Column(Integer, ForeignKey("app_users.id"))
     club_id = Column(Integer, ForeignKey("clubs.id"))
     is_active = Column(Boolean, default=True)
     upvotes = Column(Integer, default=0)
@@ -56,7 +56,7 @@ class ClubComment(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
-    author_id = Column(Integer, ForeignKey("users.id"))
+    author_id = Column(Integer, ForeignKey("app_users.id"))
     discussion_id = Column(Integer, ForeignKey("club_discussions.id"))
     parent_id = Column(Integer, ForeignKey("club_comments.id"), nullable=True)
     upvotes = Column(Integer, default=0)
