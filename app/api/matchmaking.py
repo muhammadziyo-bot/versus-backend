@@ -93,7 +93,7 @@ async def join_matchmaking(
     
     # Check if user is already in queue using Redis
     user_queues_data = redis_client.get(USER_QUEUES_KEY)
-    user_queues = json.loads(user_queues_data) if user_queues_data else {}
+    user_queues = json.loads(user_queues_data) if isinstance(user_queues_data, str) else user_queues_data if user_queues_data else {}
     
     if str(user_id) in user_queues:
         raise HTTPException(
@@ -113,7 +113,7 @@ async def join_matchmaking(
     
     # Get current queue from Redis
     queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
-    matchmaking_queue = json.loads(queue_data) if queue_data else []
+    matchmaking_queue = json.loads(queue_data) if isinstance(queue_data, str) else queue_data if queue_data else []
     
     matchmaking_queue.append(queue_entry)
     
@@ -157,12 +157,12 @@ async def get_queue_status(
     
     # Get user queues from Redis
     user_queues_data = redis_client.get(USER_QUEUES_KEY)
-    user_queues = json.loads(user_queues_data) if user_queues_data else {}
+    user_queues = json.loads(user_queues_data) if isinstance(user_queues_data, str) else user_queues_data if user_queues_data else {}
     
     if str(user_id) not in user_queues:
         # Get queue size
         queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
-        matchmaking_queue = json.loads(queue_data) if queue_data else []
+        matchmaking_queue = json.loads(queue_data) if isinstance(queue_data, str) else queue_data if queue_data else []
         
         return {
             "queue_size": len(matchmaking_queue),
@@ -174,11 +174,11 @@ async def get_queue_status(
     
     # Check if user has a match
     active_matches_data = redis_client.get(ACTIVE_MATCHES_KEY)
-    active_matches = json.loads(active_matches_data) if active_matches_data else {}
+    active_matches = json.loads(active_matches_data) if isinstance(active_matches_data, str) else active_matches_data if active_matches_data else {}
     
     if str(user_id) in active_matches:
         queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
-        matchmaking_queue = json.loads(queue_data) if queue_data else []
+        matchmaking_queue = json.loads(queue_data) if isinstance(queue_data, str) else queue_data if queue_data else []
         
         return {
             "queue_size": len(matchmaking_queue),
@@ -191,7 +191,7 @@ async def get_queue_status(
     
     # Get queue position
     queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
-    matchmaking_queue = json.loads(queue_data) if queue_data else []
+    matchmaking_queue = json.loads(queue_data) if isinstance(queue_data, str) else queue_data if queue_data else []
     
     position = None
     for i, entry in enumerate(matchmaking_queue):
@@ -219,7 +219,7 @@ async def leave_matchmaking(
     
     # Get user queues from Redis
     user_queues_data = redis_client.get(USER_QUEUES_KEY)
-    user_queues = json.loads(user_queues_data) if user_queues_data else {}
+    user_queues = json.loads(user_queues_data) if isinstance(user_queues_data, str) else user_queues_data if user_queues_data else {}
     
     if str(user_id) not in user_queues:
         raise HTTPException(
@@ -229,7 +229,7 @@ async def leave_matchmaking(
     
     # Remove from queue
     queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
-    matchmaking_queue = json.loads(queue_data) if queue_data else []
+    matchmaking_queue = json.loads(queue_data) if isinstance(queue_data, str) else queue_data if queue_data else []
     
     matchmaking_queue[:] = [entry for entry in matchmaking_queue if entry["user_id"] != user_id]
     redis_client.set(MATCHMAKING_QUEUE_KEY, matchmaking_queue, expire=300)
@@ -239,7 +239,7 @@ async def leave_matchmaking(
     
     # Remove from active matches if exists
     active_matches_data = redis_client.get(ACTIVE_MATCHES_KEY)
-    active_matches = json.loads(active_matches_data) if active_matches_data else {}
+    active_matches = json.loads(active_matches_data) if isinstance(active_matches_data, str) else active_matches_data if active_matches_data else {}
     
     if str(user_id) in active_matches:
         del active_matches[str(user_id)]
@@ -251,7 +251,7 @@ async def find_match(user_id: int, debate_id: int, db: Session) -> Optional[dict
     """Find a compatible match for the user using Redis"""
     # Get current queue from Redis
     queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
-    matchmaking_queue = json.loads(queue_data) if queue_data else []
+    matchmaking_queue = json.loads(queue_data) if isinstance(queue_data, str) else queue_data if queue_data else []
     
     user_entry = None
     for entry in matchmaking_queue:
@@ -309,7 +309,7 @@ async def find_match(user_id: int, debate_id: int, db: Session) -> Optional[dict
             
             # Update user queues in Redis
             user_queues_data = redis_client.get(USER_QUEUES_KEY)
-            user_queues = json.loads(user_queues_data) if user_queues_data else {}
+            user_queues = json.loads(user_queues_data) if isinstance(user_queues_data, str) else user_queues_data if user_queues_data else {}
             
             if str(user_id) in user_queues:
                 del user_queues[str(user_id)]
@@ -320,7 +320,7 @@ async def find_match(user_id: int, debate_id: int, db: Session) -> Optional[dict
             
             # Store active matches in Redis
             active_matches_data = redis_client.get(ACTIVE_MATCHES_KEY)
-            active_matches = json.loads(active_matches_data) if active_matches_data else {}
+            active_matches = json.loads(active_matches_data) if isinstance(active_matches_data, str) else active_matches_data if active_matches_data else {}
             
             active_matches[str(user_id)] = match_data
             active_matches[str(opponent["user_id"])] = match_data
