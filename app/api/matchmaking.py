@@ -123,7 +123,7 @@ async def join_matchmaking(
     redis_client.set(USER_QUEUES_KEY, user_queues, expire=300)
     
     # Try to find immediate match
-    match = await find_match(user_id, request.debate_id)
+    match = await find_match(user_id, request.debate_id, db)
     
     if match:
         return {
@@ -247,7 +247,7 @@ async def leave_matchmaking(
     
     return {"message": "Left matchmaking queue"}
 
-async def find_match(user_id: int, debate_id: int) -> Optional[dict]:
+async def find_match(user_id: int, debate_id: int, db: Session) -> Optional[dict]:
     """Find a compatible match for the user using Redis"""
     # Get current queue from Redis
     queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)
@@ -269,32 +269,34 @@ async def find_match(user_id: int, debate_id: int) -> Optional[dict]:
         
         # Check compatibility
         if is_compatible(user_entry, opponent):
-            # Create match
-            battle_id = f"battle_{int(time.time())}"
+            # Create real battle room in database
+            from app.services.debate_service import DebateService
+            debate_service = DebateService(db)
             
-            # Create battle data
+            # Assign sides randomly
+            if time.time() % 2 < 1:
+                pro_user_id = user_id
+                con_user_id = opponent["user_id"]
+            else:
+                pro_user_id = opponent["user_id"]
+                con_user_id = user_id
+            
+            # Create battle room in database
+            battle_room = debate_service.create_battle_room(debate_id, pro_user_id, con_user_id)
+            
+            # Create match data for response
             match_data = {
-                "battle_id": battle_id,
+                "battle_id": battle_room.id,
                 "debate_id": debate_id,
                 "user1_id": user_id,
                 "user2_id": opponent["user_id"],
                 "user1_username": user_entry["username"],
                 "user2_username": opponent["username"],
+                "pro_user_id": pro_user_id,
+                "con_user_id": con_user_id,
                 "created_at": datetime.now().isoformat(),
                 "status": "waiting"
             }
-            
-            # Assign sides randomly
-            if time.time() % 2 < 1:
-                match_data["pro_user_id"] = user_id
-                match_data["con_user_id"] = opponent["user_id"]
-                match_data["user1_side"] = "pro"
-                match_data["user2_side"] = "con"
-            else:
-                match_data["pro_user_id"] = opponent["user_id"]
-                match_data["con_user_id"] = user_id
-                match_data["user1_side"] = "con"
-                match_data["user2_side"] = "pro"
             
             # Remove both users from queue
             matchmaking_queue[:] = [
