@@ -12,6 +12,7 @@ from app.models.debate import EloHistory
 from app.core.dependencies import get_current_user
 from app.core.security import verify_password, get_password_hash
 from app.services.telegram_service import telegram_service
+from app.config import settings
 import os
 import uuid
 from pathlib import Path
@@ -218,15 +219,17 @@ async def upload_avatar(
     
     # Delete old avatar if exists
     if user.avatar_url:
-        old_avatar_path = Path(user.avatar_url.replace("http://localhost:8000/", ""))
-        if old_avatar_path.exists():
+        # Extract just the path portion from the URL
+        old_avatar_path = Path(user.avatar_url.split("/uploads/avatars/")[-1])
+        old_avatar_full_path = Path("uploads/avatars") / old_avatar_path
+        if old_avatar_full_path.exists():
             try:
-                old_avatar_path.unlink()
+                old_avatar_full_path.unlink()
             except:
                 pass
     
     # Set new avatar URL
-    user.avatar_url = f"http://localhost:8000/uploads/avatars/{unique_filename}"
+    user.avatar_url = f"{settings.base_url}/uploads/avatars/{unique_filename}"
     db.commit()
     db.refresh(user)
     

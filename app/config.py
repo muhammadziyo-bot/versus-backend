@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     cors_origins: List[str] = ["http://localhost:5173"]
+    base_url: str = "http://localhost:8000"
     
     # Services
     telegram_bot_token: Optional[str] = None
