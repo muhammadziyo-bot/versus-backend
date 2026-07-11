@@ -149,7 +149,7 @@ async def get_queue_status(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get current queue status"""
+    """Get current queue status and attempt to find matches"""
     # Cleanup stale users periodically
     cleanup_stale_users()
     
@@ -188,6 +188,23 @@ async def get_queue_status(
             "match_found": True,
             "battle": active_matches[str(user_id)]
         }
+    
+    # User is in queue but no match yet - try to find a match
+    user_entry = user_queues.get(str(user_id))
+    if user_entry:
+        debate_id = user_entry.get("debate_id")
+        if debate_id:
+            match = await find_match(user_id, debate_id, db)
+            if match:
+                # Match found!
+                return {
+                    "queue_size": 0,
+                    "position": None,
+                    "estimated_wait_time": None,
+                    "users_waiting": [],
+                    "match_found": True,
+                    "battle": match
+                }
     
     # Get queue position
     queue_data = redis_client.get(MATCHMAKING_QUEUE_KEY)

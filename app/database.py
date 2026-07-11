@@ -4,10 +4,11 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
 # Configure connection pooling for production
+# Supabase free tier limits: 15 concurrent connections in session mode
 engine = create_engine(
     settings.database_url,
-    pool_size=20,           # Number of connections to keep in pool
-    max_overflow=10,        # Additional connections allowed beyond pool_size
+    pool_size=10,           # Number of connections to keep in pool (reduced for Supabase limits)
+    max_overflow=5,         # Additional connections allowed beyond pool_size (reduced for Supabase limits)
     pool_pre_ping=True,      # Verify connections before using
     pool_recycle=3600,       # Recycle connections after 1 hour
     echo=False               # Set to True for SQL query logging in development
