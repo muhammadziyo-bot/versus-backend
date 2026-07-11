@@ -14,8 +14,9 @@ from app.core.logging_config import logger
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Note: Database tables should be created via migrations, not on startup
+# Commented out to prevent connection issues during deployment
+# Base.metadata.create_all(bind=engine)
 
 # Initialize Sentry if DSN is provided
 if settings.sentry_dsn:

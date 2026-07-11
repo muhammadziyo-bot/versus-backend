@@ -5,12 +5,13 @@ from app.config import settings
 
 # Configure connection pooling for production
 # Supabase free tier limits: 15 concurrent connections in session mode
+# Use null pool to avoid connection pooling issues with limited connections
 engine = create_engine(
     settings.database_url,
-    pool_size=10,           # Number of connections to keep in pool (reduced for Supabase limits)
-    max_overflow=5,         # Additional connections allowed beyond pool_size (reduced for Supabase limits)
+    pool_size=5,            # Number of connections to keep in pool (very conservative)
+    max_overflow=2,         # Additional connections allowed beyond pool_size
     pool_pre_ping=True,      # Verify connections before using
-    pool_recycle=3600,       # Recycle connections after 1 hour
+    pool_recycle=1800,       # Recycle connections after 30 minutes
     echo=False               # Set to True for SQL query logging in development
 )
 
