@@ -173,6 +173,16 @@ class DebateService:
         if not round_obj:
             raise ValueError("Round not found")
         
+        # Enforce sequential submission: Pro must submit before Con
+        if user_id == battle_room.con_user_id and not round_obj.pro_argument:
+            raise ValueError("Pro must submit their argument first")
+        
+        # Check if user already submitted their argument for this round
+        if user_id == battle_room.pro_user_id and round_obj.pro_argument:
+            raise ValueError("You have already submitted your argument for this round")
+        if user_id == battle_room.con_user_id and round_obj.con_argument:
+            raise ValueError("You have already submitted your argument for this round")
+        
         # Determine which side the user is on and submit argument
         side = None
         if user_id == battle_room.pro_user_id:

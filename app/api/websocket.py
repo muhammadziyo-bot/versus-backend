@@ -334,6 +334,8 @@ class WebSocketManager:
             argument = data.get("argument", "").strip()
             round_number = data.get("round_number", 1)
             
+            logger.info(f"Argument submission from user {user_id} for round {round_number}: {argument[:50]}...")
+            
             if not argument:
                 await self.send_to_user(user_id, {
                     "type": "error",
@@ -344,6 +346,7 @@ class WebSocketManager:
             
             # Submit argument
             round_obj = debate_service.submit_round_argument(battle_room_id, round_number, argument, user_id)
+            logger.info(f"Argument submitted successfully, round status: {round_obj.status}")
             
             # Determine user's side
             battle = debate_service.get_battle_room(battle_room_id)
@@ -360,6 +363,7 @@ class WebSocketManager:
                 },
                 "timestamp": datetime.utcnow().isoformat()
             })
+            logger.info(f"Broadcasted argument_submitted event for round {round_number}")
             
             # Check if round is complete
             if round_obj.status == "completed":
