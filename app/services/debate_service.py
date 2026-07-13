@@ -96,7 +96,7 @@ class DebateService:
     # ========== BATTLE SYSTEM METHODS ==========
     
     def create_battle_room(self, debate_id: int, pro_user_id: int, con_user_id: int) -> BattleRoom:
-        """Create a new battle room"""
+        """Create a new battle room - pro_user_id is the creator, con_user_id is the opponent"""
         battle_room = BattleRoom(
             debate_id=debate_id,
             pro_user_id=pro_user_id,

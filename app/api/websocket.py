@@ -57,6 +57,11 @@ class WebSocketManager:
         rounds = debate_service.get_battle_rounds(battle_room_id)
         votes = debate_service.get_battle_votes(battle_room_id)
         
+        # Get user info for both participants
+        from app.models.user import User
+        pro_user = db.query(User).filter(User.id == battle.pro_user_id).first()
+        con_user = db.query(User).filter(User.id == battle.con_user_id).first()
+        
         await websocket.send_text(json.dumps({
             "type": "battle_state",
             "data": {
@@ -73,7 +78,20 @@ class WebSocketManager:
                     "winner_side": battle.winner_side,
                     "winner_user_id": battle.winner_user_id,
                     "pro_user_id": battle.pro_user_id,
-                    "con_user_id": battle.con_user_id
+                    "con_user_id": battle.con_user_id,
+                    "debate_id": battle.debate_id,
+                    "pro_user": {
+                        "id": pro_user.id if pro_user else None,
+                        "username": pro_user.username if pro_user else None,
+                        "avatar_url": pro_user.avatar_url if pro_user else None,
+                        "elo_rating": pro_user.elo_rating if pro_user else None
+                    } if pro_user else None,
+                    "con_user": {
+                        "id": con_user.id if con_user else None,
+                        "username": con_user.username if con_user else None,
+                        "avatar_url": con_user.avatar_url if con_user else None,
+                        "elo_rating": con_user.elo_rating if con_user else None
+                    } if con_user else None
                 },
                 "rounds": [
                     {
