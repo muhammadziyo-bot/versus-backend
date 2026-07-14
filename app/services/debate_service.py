@@ -120,6 +120,25 @@ class DebateService:
         self.db.commit()
         return battle_room
     
+    def select_battle_side(self, battle_room_id: int, user_id: int, side: str) -> BattleRoom:
+        """Select a side for the battle (pro or con) - only available when both users are in room but sides not assigned"""
+        battle_room = self.db.query(BattleRoom).filter(BattleRoom.id == battle_room_id).first()
+        if not battle_room:
+            raise ValueError("Battle room not found")
+        
+        # Verify user is part of this battle
+        if user_id not in [battle_room.pro_user_id, battle_room.con_user_id]:
+            raise ValueError("User is not part of this battle")
+        
+        # Check if battle is still in waiting state
+        if battle_room.status != "waiting":
+            raise ValueError("Battle has already started, cannot change sides")
+        
+        # For now, sides are already assigned during battle creation
+        # This method is a placeholder for future side selection functionality
+        # Currently, the creator is always pro and opponent is always con
+        return battle_room
+    
     def start_battle(self, battle_room_id: int) -> BattleRoom:
         """Start a battle"""
         battle_room = self.db.query(BattleRoom).filter(BattleRoom.id == battle_room_id).first()

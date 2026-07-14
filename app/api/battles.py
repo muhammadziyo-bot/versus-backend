@@ -86,6 +86,9 @@ class BattleRoomCreate(BaseModel):
     debate_id: int
     opponent_id: int
 
+class SideSelection(BaseModel):
+    side: str  # 'pro' or 'con'
+
 class ArgumentSubmit(BaseModel):
     round_number: int
     argument: str
@@ -300,6 +303,37 @@ def start_battle(
             )
         
         return battle_room
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.post("/{battle_id}/select-side", response_model=BattleRoomResponse)
+@limiter.limit("20/minute")
+def select_side(
+    request: Request,
+    battle_id: int,
+    side_selection: SideSelection,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Select a side for the battle (pro or con)"""
+    from app.models.debate import BattleRoom
+    from sqlalchemy.orm import joinedload
+    
+    debate_service = DebateService(db)
+    
+    try:
+        battle_room = debate_service.select_battle_side(battle_id, current_user.id, side_selection.side)
+        
+        # Eagerly load user relationships for response
+        battle_room_with_users = db.query(BattleRoom).options(
+            joinedload(BattleRoom.pro_user),
+            joinedload(BattleRoom.con_user)
+        ).filter(BattleRoom.id == battle_room.id).first()
+        
+        return battle_room_with_users
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
