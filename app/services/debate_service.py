@@ -155,6 +155,12 @@ class DebateService:
         if not battle_room:
             raise ValueError("Battle room not found")
         
+        print(f"=== STARTING BATTLE ===")
+        print(f"Battle Room ID: {battle_room_id}")
+        print(f"Current Status: {battle_room.status}")
+        print(f"Pro User ID: {battle_room.pro_user_id}")
+        print(f"Con User ID: {battle_room.con_user_id}")
+        
         if battle_room.status != "waiting":
             raise ValueError("Battle is not in waiting state")
         
@@ -175,9 +181,21 @@ class DebateService:
         if first_round:
             first_round.status = "active"
             first_round.started_at = datetime.utcnow()
+            print(f"Activated Round 1 with ID: {first_round.id}")
+        else:
+            print(f"ERROR: Round 1 not found for battle room {battle_room_id}")
+            # Check what rounds exist
+            all_rounds = self.db.query(BattleRound).filter(
+                BattleRound.battle_room_id == battle_room_id
+            ).all()
+            print(f"Existing rounds: {[(r.id, r.round_number, r.status) for r in all_rounds]}")
         
         self.db.commit()
         self.db.refresh(battle_room)
+        
+        print(f"Battle started successfully")
+        print(f"======================")
+        
         return battle_room
     
     def submit_round_argument(self, battle_room_id: int, round_number: int, argument: str, user_id: int) -> BattleRound:
