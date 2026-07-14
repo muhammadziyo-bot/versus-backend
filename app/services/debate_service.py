@@ -97,16 +97,26 @@ class DebateService:
     
     def create_battle_room(self, debate_id: int, pro_user_id: int, con_user_id: int) -> BattleRoom:
         """Create a new battle room - pro_user_id is the creator, con_user_id is the opponent"""
+        print(f"=== CREATING BATTLE ROOM ===")
+        print(f"Debate ID: {debate_id}")
+        print(f"Pro User ID: {pro_user_id} (type: {type(pro_user_id)})")
+        print(f"Con User ID: {con_user_id} (type: {type(con_user_id)})")
+        
         battle_room = BattleRoom(
             debate_id=debate_id,
-            pro_user_id=pro_user_id,
-            con_user_id=con_user_id,
+            pro_user_id=int(pro_user_id),
+            con_user_id=int(con_user_id),
             status="waiting"
         )
         
         self.db.add(battle_room)
         self.db.commit()
         self.db.refresh(battle_room)
+        
+        print(f"Battle Room Created with ID: {battle_room.id}")
+        print(f"Stored Pro User ID: {battle_room.pro_user_id} (type: {type(battle_room.pro_user_id)})")
+        print(f"Stored Con User ID: {battle_room.con_user_id} (type: {type(battle_room.con_user_id)})")
+        print(f"============================")
         
         # Create battle rounds
         for round_num in range(1, 4):  # 3 rounds

@@ -378,6 +378,11 @@ def get_battle_room(
     from app.models.debate import BattleRoom
     from sqlalchemy.orm import joinedload
     
+    print(f"=== GET BATTLE ROOM ===")
+    print(f"Battle ID: {battle_id}")
+    print(f"Current User ID: {current_user.id} (type: {type(current_user.id)})")
+    print(f"Current Username: {current_user.username}")
+    
     # Eagerly load user relationships
     battle_room = db.query(BattleRoom).options(
         joinedload(BattleRoom.pro_user),
@@ -390,12 +395,20 @@ def get_battle_room(
             detail="Battle room not found"
         )
     
+    print(f"Battle Room Pro User ID: {battle_room.pro_user_id} (type: {type(battle_room.pro_user_id)})")
+    print(f"Battle Room Con User ID: {battle_room.con_user_id} (type: {type(battle_room.con_user_id)})")
+    print(f"Pro User Object: {battle_room.pro_user}")
+    print(f"Con User Object: {battle_room.con_user}")
+    
     # Verify user is part of this battle
     if current_user.id not in [battle_room.pro_user_id, battle_room.con_user_id]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not part of this battle"
         )
+    
+    print(f"User is part of battle: {current_user.id == battle_room.pro_user_id or current_user.id == battle_room.con_user_id}")
+    print(f"======================")
     
     return battle_room
 
