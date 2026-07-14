@@ -31,10 +31,14 @@ def register(request: Request, user_create: UserCreate, db: Session = Depends(ge
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
 def login(request: Request, user_login: UserLogin, db: Session = Depends(get_db)):
+    print(f"=== LOGIN ATTEMPT ===")
+    print(f"Email: {user_login.email}")
+    
     user_service = UserService(db)
     try:
         user = user_service.authenticate_user(user_login.email, user_login.password)
     except ValueError as e:
+        print(f"Login failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(e),
@@ -42,11 +46,14 @@ def login(request: Request, user_login: UserLogin, db: Session = Depends(get_db)
         )
     
     if not user:
+        print(f"Authentication failed for email: {user_login.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    print(f"User authenticated: {user.username} (ID: {user.id})")
     
     if not user.is_active:
         raise HTTPException(
@@ -59,6 +66,9 @@ def login(request: Request, user_login: UserLogin, db: Session = Depends(get_db)
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     
+    print(f"Token created for user ID: {user.id}")
+    print(f"===================")
+    
     return {
         "access_token": access_token,
         "token_type": "bearer"
@@ -67,6 +77,12 @@ def login(request: Request, user_login: UserLogin, db: Session = Depends(get_db)
 @router.get("/me")
 def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """Get current user information"""
+    print(f"=== GET CURRENT USER INFO ===")
+    print(f"User ID: {current_user.id}")
+    print(f"Username: {current_user.username}")
+    print(f"Email: {current_user.email}")
+    print(f"==============================")
+    
     return {
         "id": current_user.id,
         "email": current_user.email,
@@ -76,6 +92,21 @@ def get_current_user_info(current_user: User = Depends(get_current_active_user))
         "is_active": current_user.is_active,
         "is_verified": current_user.is_verified
     }
+
+@router.get("/users")
+def get_all_users(db: Session = Depends(get_db)):
+    """Get all users (for debugging)"""
+    from app.models.user import User
+    users = db.query(User).all()
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "created_at": user.created_at
+        }
+        for user in users
+    ]
 
 @router.post("/refresh", response_model=Token)
 def refresh_token(current_user: User = Depends(get_current_active_user)):

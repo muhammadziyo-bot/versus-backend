@@ -20,10 +20,19 @@ class UserService:
         return self.db.query(User).filter(User.id == user_id).first()
     
     def create_user(self, user_create: UserCreate) -> User:
+        print(f"=== CREATING USER ===")
+        print(f"Email: {user_create.email}")
+        print(f"Username: {user_create.username}")
+        
         # Check if user already exists
-        if self.get_user_by_email(user_create.email):
+        existing_email = self.get_user_by_email(user_create.email)
+        if existing_email:
+            print(f"Email already registered with ID: {existing_email.id}")
             raise ValueError("Email already registered")
-        if self.get_user_by_username(user_create.username):
+        
+        existing_username = self.get_user_by_username(user_create.username)
+        if existing_username:
+            print(f"Username already taken with ID: {existing_username.id}")
             raise ValueError("Username already taken")
         
         # Create new user
@@ -40,6 +49,10 @@ class UserService:
         self.db.add(db_user)
         self.db.commit()
         self.db.refresh(db_user)
+        
+        print(f"User created with ID: {db_user.id}")
+        print(f"===================")
+        
         return db_user
     
     def authenticate_user(self, email: str, password: str) -> Optional[User]:
