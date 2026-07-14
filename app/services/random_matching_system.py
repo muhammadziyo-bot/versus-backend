@@ -410,22 +410,39 @@ class RandomMatchingSystem:
             return
         
         battle_room = self.active_battles[battle_id]
-        battle_room.status = 'active'
-        battle_room.started_at = datetime.now()
-        battle_room.round_started_at = datetime.now()
         
-        print(f"🚀 Battle {battle_id} started!")
+        # Don't set status here - let the debate_service.start_battle handle it
+        # Just forward the request to the proper service
+        print(f"🚀 Battle start requested for {battle_id}, forwarding to debate service")
         
-        # Notify all participants
-        await self.notify_battle_participants(battle_room, {
-            'type': 'battle_started',
-            'data': {
-                'battle_id': battle_id,
-                'message': 'Battle has begun! Round 1 starts now!',
-                'current_round': battle_room.current_round,
-                'max_rounds': battle_room.max_rounds
-            }
-        })
+        # Call the proper debate service to start the battle
+        from app.services.debate_service import DebateService
+        from app.database import get_db
+        
+        db = next(get_db())
+        debate_service = DebateService(db)
+        
+        try:
+            started_battle = debate_service.start_battle(battle_room_id=battle_id)
+            print(f"✅ Battle {battle_id} started properly via debate service")
+            
+            # Notify all participants
+            await self.notify_battle_participants(battle_room, {
+                'type': 'battle_started',
+                'data': {
+                    'battle_id': battle_id,
+                    'message': 'Battle has begun! Round 1 starts now!',
+                    'current_round': started_battle.current_round,
+                    'max_rounds': started_battle.max_rounds
+                }
+            })
+        except ValueError as e:
+            await self.send_to_user(user, {
+                'type': 'error',
+                'data': {'message': str(e)}
+            })
+        finally:
+            db.close()
     
     async def handle_submit_argument(self, user: User, data: Dict):
         """Handle argument submission"""
