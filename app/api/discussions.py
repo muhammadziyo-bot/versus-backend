@@ -4,20 +4,20 @@ from typing import List
 from app.database import get_db
 from app.schemas.discussion import DiscussionList, DiscussionStats, DiscussionCreate, DiscussionDetail, CommentCreate, Comment, VoteRequest
 from app.services.discussion_service import DiscussionService
-from app.core.dependencies import get_current_user, get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_user_optional, get_current_unmuted_user
+from app.core.content_filter import contains_prohibited_content, get_filter_error_message
 from app.models.user import User
 from app.models.club import ClubDiscussion
 
 router = APIRouter(prefix="/api/discussions", tags=["discussions"])
 comments_router = APIRouter(prefix="/api/comments", tags=["comments"])
 
-def send_comment_notification(discussion_author_id: int, commenter_username: str, topic_title: str, comment_preview: str, topic_id: int, db: Session):
+async def send_comment_notification(discussion_author_id: int, commenter_username: str, topic_title: str, comment_preview: str, topic_id: int, db: Session):
     """Send comment notification in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     from app.models.user import User
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
@@ -40,17 +40,16 @@ def send_comment_notification(discussion_author_id: int, commenter_username: str
     # Send Telegram notification
     try:
         user = db.query(User).filter(User.id == discussion_author_id).first()
-        asyncio.run(notification_service._send_telegram_notification(notification, user))
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
-def send_reply_notification(parent_comment_author_id: int, replier_username: str, topic_title: str, reply_preview: str, topic_id: int, db: Session):
+async def send_reply_notification(parent_comment_author_id: int, replier_username: str, topic_title: str, reply_preview: str, topic_id: int, db: Session):
     """Send reply notification in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     from app.models.user import User
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
@@ -73,17 +72,16 @@ def send_reply_notification(parent_comment_author_id: int, replier_username: str
     # Send Telegram notification
     try:
         user = db.query(User).filter(User.id == parent_comment_author_id).first()
-        asyncio.run(notification_service._send_telegram_notification(notification, user))
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
-def send_comment_like_notification(comment_author_id: int, voter_username: str, topic_title: str, vote_type: str, topic_id: int, db: Session):
+async def send_comment_like_notification(comment_author_id: int, voter_username: str, topic_title: str, vote_type: str, topic_id: int, db: Session):
     """Send comment like/dislike notification in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     from app.models.user import User
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
@@ -106,7 +104,7 @@ def send_comment_like_notification(comment_author_id: int, voter_username: str, 
     # Send Telegram notification
     try:
         user = db.query(User).filter(User.id == comment_author_id).first()
-        asyncio.run(notification_service._send_telegram_notification(notification, user))
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
@@ -132,8 +130,10 @@ def get_discussion(discussion_id: int, db: Session = Depends(get_db), current_us
 def create_discussion(
     discussion: DiscussionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
+    if contains_prohibited_content(discussion.title) or contains_prohibited_content(discussion.content):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     try:
         discussion_service = DiscussionService(db)
         return discussion_service.create_discussion(discussion, current_user.id)
@@ -147,8 +147,10 @@ def create_comment(
     comment: CommentCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
+    if contains_prohibited_content(comment.content):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     discussion_service = DiscussionService(db)
     new_comment = discussion_service.create_comment(discussion_id, comment, current_user.id)
     
@@ -189,7 +191,7 @@ def vote_discussion(
     discussion_id: int,
     vote: VoteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
     discussion_service = DiscussionService(db)
     discussion = discussion_service.vote_discussion(discussion_id, vote.vote_type, current_user.id)
@@ -217,7 +219,7 @@ def vote_comment(
     vote: VoteRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
     discussion_service = DiscussionService(db)
     comment = discussion_service.vote_comment(comment_id, vote.vote_type, current_user.id)

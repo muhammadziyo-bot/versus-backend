@@ -7,7 +7,8 @@ from datetime import datetime
 from app.database import get_db
 from app.services.debate_service import DebateService
 from app.services.ai_scoring_service import AIScoringService
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import get_current_active_user, get_current_unmuted_user
+from app.core.content_filter import contains_prohibited_content, get_filter_error_message
 from app.models.user import User
 from app.models.debate import Debate
 from slowapi import Limiter
@@ -16,13 +17,12 @@ from slowapi.util import get_remote_address
 router = APIRouter(prefix="/api/battles", tags=["battles"])
 limiter = Limiter(key_func=get_remote_address)
 
-def send_battle_invitation_notification(opponent_id: int, inviter_username: str, topic_title: str, battle_id: int, db: Session):
+async def send_battle_invitation_notification(opponent_id: int, inviter_username: str, topic_title: str, battle_id: int, db: Session):
     """Send battle invitation notification in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     from app.models.user import User
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
@@ -44,17 +44,16 @@ def send_battle_invitation_notification(opponent_id: int, inviter_username: str,
     # Send Telegram notification
     try:
         user = db.query(User).filter(User.id == opponent_id).first()
-        asyncio.run(notification_service._send_telegram_notification(notification, user))
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
-def send_battle_result_notification(user_id: int, opponent_username: str, topic_title: str, won: bool, battle_id: int, db: Session):
+async def send_battle_result_notification(user_id: int, opponent_username: str, topic_title: str, won: bool, battle_id: int, db: Session):
     """Send battle result notification in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     from app.models.user import User
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
@@ -77,7 +76,7 @@ def send_battle_result_notification(user_id: int, opponent_username: str, topic_
     # Send Telegram notification
     try:
         user = db.query(User).filter(User.id == user_id).first()
-        asyncio.run(notification_service._send_telegram_notification(notification, user))
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
@@ -238,7 +237,7 @@ def create_battle_room(
     request: Request,
     battle_create: BattleRoomCreate,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_unmuted_user),
     db: Session = Depends(get_db)
 ):
     """Create a new battle room"""
@@ -346,10 +345,12 @@ def submit_round_argument(
     request: Request,
     battle_id: int,
     argument_data: ArgumentSubmit,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_unmuted_user),
     db: Session = Depends(get_db)
 ):
     """Submit an argument for a specific round"""
+    if contains_prohibited_content(argument_data.argument):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     debate_service = DebateService(db)
     
     try:
@@ -617,3 +618,23 @@ def get_round_ai_scores(
     scores = ai_service.get_argument_scores(round_id)
     
     return scores
+
+
+@router.get("/{battle_id}/ai-calibration")
+def get_ai_calibration(
+    battle_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get AI vs community score calibration for a battle"""
+    debate_service = DebateService(db)
+    battle_room = debate_service.get_battle_room(battle_id)
+    if not battle_room:
+        raise HTTPException(status_code=404, detail="Battle room not found")
+
+    if current_user.id not in [battle_room.pro_user_id, battle_room.con_user_id]:
+        raise HTTPException(status_code=403, detail="You are not part of this battle")
+
+    ai_service = AIScoringService(db)
+    calibration = ai_service.calculate_calibration(battle_id)
+    return calibration

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import json
 import logging
+from datetime import datetime
 
 from app.database import get_db
 from app.api.websocket import websocket_manager
@@ -59,14 +60,14 @@ async def websocket_endpoint(
                 await websocket.send_text(json.dumps({
                     "type": "error",
                     "data": {"message": "Invalid JSON format"},
-                    "timestamp": "2025-01-04T00:00:00"
+                    "timestamp": datetime.utcnow().isoformat()
                 }))
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
                 await websocket.send_text(json.dumps({
                     "type": "error",
                     "data": {"message": "Error processing message"},
-                    "timestamp": "2025-01-04T00:00:00"
+                    "timestamp": datetime.utcnow().isoformat()
                 }))
     
     except WebSocketDisconnect:

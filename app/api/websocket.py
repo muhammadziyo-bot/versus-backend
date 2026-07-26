@@ -144,14 +144,14 @@ class WebSocketManager:
             "timestamp": datetime.utcnow().isoformat()
         }, exclude_user_id=user_id)
         
-        # Auto-start battle if both users are connected and battle is in waiting state
-        if battle.status == "waiting":
-            connected_users = len(self.battle_connections.get(battle_room_id, {}))
-            if connected_users == 2:
-                try:
-                    await self._handle_battle_start(battle_room_id, user_id, db)
-                except Exception as e:
-                    logger.error(f"Error auto-starting battle: {e}")
+        # Disabled auto-start - battle should only start when user clicks Start Battle button
+        # if battle.status == "waiting":
+        #     connected_users = len(self.battle_connections.get(battle_room_id, {}))
+        #     if connected_users == 2:
+        #         try:
+        #             await self._handle_battle_start(battle_room_id, user_id, db)
+        #         except Exception as e:
+        #             logger.error(f"Error auto-starting battle: {e}")
         
         return True
 

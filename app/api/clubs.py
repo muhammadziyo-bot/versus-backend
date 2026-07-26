@@ -6,7 +6,8 @@ from app.schemas.club import ClubCreate, ClubResponse, ClubList
 from app.services.club_service import ClubService
 from app.models.user import User
 from app.models.club import ClubDiscussion, ClubComment
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_unmuted_user
+from app.core.content_filter import contains_prohibited_content, get_filter_error_message
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -22,13 +23,12 @@ class ClubCommentCreate(BaseModel):
 router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 limiter = Limiter(key_func=get_remote_address)
 
-def send_club_join_notification(club_founder_id: int, new_member_username: str, club_name: str, db: Session):
+async def send_club_join_notification(club_founder_id: int, new_member_username: str, club_name: str, db: Session):
     """Send club join notification in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     from app.models.user import User
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
@@ -49,7 +49,7 @@ def send_club_join_notification(club_founder_id: int, new_member_username: str, 
     # Send Telegram notification
     try:
         user = db.query(User).filter(User.id == club_founder_id).first()
-        asyncio.run(notification_service._send_telegram_notification(notification, user))
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
@@ -82,8 +82,10 @@ def create_club(
     request: Request,
     club: ClubCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
+    if contains_prohibited_content(club.name) or (club.description and contains_prohibited_content(club.description)):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     club_service = ClubService(db)
     return club_service.create_club(club, founder_id=current_user.id)
 
@@ -100,7 +102,7 @@ def join_club(
     club_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
     """Join a club"""
     from app.models.club import club_members, Club
@@ -243,9 +245,11 @@ def create_club_discussion(
     club_id: int,
     discussion: ClubDiscussionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
     """Create a new discussion in a club"""
+    if contains_prohibited_content(discussion.title) or contains_prohibited_content(discussion.content):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     from app.models.club import Club, club_members
     
     club = db.query(Club).filter(Club.id == club_id).first()
@@ -290,9 +294,11 @@ def create_club_comment(
     discussion_id: int,
     comment: ClubCommentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
     """Create a comment on a club discussion"""
+    if contains_prohibited_content(comment.content):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     from app.models.club import Club, ClubDiscussion, club_members
     
     club = db.query(Club).filter(Club.id == club_id).first()

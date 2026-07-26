@@ -4,6 +4,7 @@ from app.models.user import User
 from app.schemas.notification import NotificationCreate, NotificationUpdate
 from typing import List
 from app.services.telegram_service import telegram_service
+from app.config import settings
 import json
 
 class NotificationService:
@@ -43,38 +44,42 @@ class NotificationService:
                 except:
                     data = {}
             
-            # Base URL for the website
-            base_url = "http://localhost:5173"  # Update with your production URL
+            # Base URL for the website (from config, defaults to localhost:5173 in dev)
+            base_url = settings.frontend_url
             
             # Send appropriate notification based on type
             if notification.type == "battle_invitation":
+                battle_id = data.get("battle_id", "")
                 await telegram_service.send_battle_invitation(
                     chat_id=user.telegram_chat_id,
                     inviter_username=data.get("inviter_username", "Someone"),
                     topic_title=data.get("topic_title", "Unknown topic"),
-                    battle_url=""  # Telegram doesn't allow localhost URLs
+                    battle_url=f"{base_url}/battle/room/{battle_id}" if battle_id else base_url
                 )
             elif notification.type == "friend_request":
+                requester_username = data.get("requester_username", "Someone")
                 await telegram_service.send_friend_request(
                     chat_id=user.telegram_chat_id,
-                    requester_username=data.get("requester_username", "Someone"),
-                    profile_url=""  # Telegram doesn't allow localhost URLs
+                    requester_username=requester_username,
+                    profile_url=f"{base_url}/profile/{requester_username}" if requester_username else base_url
                 )
             elif notification.type == "comment":
+                topic_id = data.get("topic_id", "")
                 await telegram_service.send_comment_notification(
                     chat_id=user.telegram_chat_id,
                     commenter_username=data.get("commenter_username", "Someone"),
                     topic_title=data.get("topic_title", "Unknown topic"),
                     comment_preview=data.get("comment_preview", ""),
-                    topic_url=""  # Telegram doesn't allow localhost URLs
+                    topic_url=f"{base_url}/discussions/{topic_id}" if topic_id else base_url
                 )
             elif notification.type == "battle_result":
+                battle_id = data.get("battle_id", "")
                 await telegram_service.send_battle_result(
                     chat_id=user.telegram_chat_id,
                     opponent_username=data.get("opponent_username", "Someone"),
                     topic_title=data.get("topic_title", "Unknown topic"),
                     won=data.get("won", False),
-                    battle_url=""  # Telegram doesn't allow localhost URLs
+                    battle_url=f"{base_url}/battle/room/{battle_id}" if battle_id else base_url
                 )
             else:
                 # Generic notification
@@ -82,7 +87,7 @@ class NotificationService:
                     chat_id=user.telegram_chat_id,
                     title=notification.title,
                     message=notification.message,
-                    action_url=""  # Telegram doesn't allow localhost URLs
+                    action_url=base_url
                 )
         except Exception as e:
             # Log error but don't fail the notification creation

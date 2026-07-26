@@ -142,6 +142,16 @@ class AIArgumentScore(Base):
     weaknesses = Column(Text)  # AI-generated weaknesses
     detailed_feedback = Column(Text)  # Comprehensive AI analysis
     
+    # Status tracking
+    score_status = Column(String, default="pending")  # "pending", "completed", "failed"
+    retry_count = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    
+    # Calibration tracking
+    community_average_score = Column(Integer, nullable=True)
+    score_deviation = Column(Integer, nullable=True)
+    calibration_status = Column(String, default="pending")  # "pending", "calibrated"
+    
     # Metadata
     model_used = Column(String)  # Which AI model scored this
     scored_at = Column(DateTime(timezone=True), server_default=func.now())

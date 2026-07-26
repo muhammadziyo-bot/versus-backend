@@ -7,8 +7,8 @@ from slowapi.errors import RateLimitExceeded
 from pathlib import Path
 from app.config import settings
 from app.database import engine, Base, SessionLocal
-from app.api import auth, debates, clubs, users, discussions, battles, websocket_endpoints, matchmaking, notifications, friends
-from app.models import user, debate, club, notification, friend
+from app.api import auth, debates, clubs, users, discussions, battles, websocket_endpoints, matchmaking, notifications, friends, moderation as moderation_api
+from app.models import user, debate, club, notification, friend, moderation
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.logging_config import logger
 import sentry_sdk
@@ -62,6 +62,7 @@ app.include_router(battles.router)
 app.include_router(matchmaking.router)
 app.include_router(notifications.router)
 app.include_router(friends.router)
+app.include_router(moderation_api.router)
 
 # Include WebSocket endpoint
 app.websocket("/ws/battle/{battle_room_id}")(websocket_endpoints.websocket_endpoint)

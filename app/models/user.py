@@ -28,6 +28,11 @@ class User(Base):
     telegram_username = Column(String, unique=True, index=True)
     telegram_chat_id = Column(String, unique=True, index=True)
     
+    # Moderation fields
+    is_admin = Column(Boolean, default=False)
+    is_muted = Column(Boolean, default=False)
+    is_banned = Column(Boolean, default=False)
+    
     # Security fields
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime(timezone=True), nullable=True)
@@ -35,3 +40,11 @@ class User(Base):
     # Relationships
     debates = relationship("Debate", back_populates="creator")
     clubs = relationship("Club", secondary="club_members", back_populates="members")
+    
+    # Moderation relationships
+    reports_filed = relationship("Report", foreign_keys="Report.reporter_id", back_populates="reporter")
+    reports_received = relationship("Report", foreign_keys="Report.reported_user_id", back_populates="reported_user")
+    reports_resolved = relationship("Report", foreign_keys="Report.resolved_by", back_populates="resolver")
+    bans_active = relationship("UserBan", foreign_keys="UserBan.user_id", back_populates="user")
+    bans_issued = relationship("UserBan", foreign_keys="UserBan.banned_by", back_populates="banned_by_user")
+    bans_lifted = relationship("UserBan", foreign_keys="UserBan.lifted_by", back_populates="lifted_by_user")

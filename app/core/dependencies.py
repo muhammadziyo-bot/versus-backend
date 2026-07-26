@@ -9,9 +9,14 @@ from typing import Optional
 security = HTTPBearer(auto_error=False)
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authenticated"
+        )
     token = credentials.credentials
     email = verify_token(token)
     
@@ -52,5 +57,26 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
+        )
+    if current_user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account suspended"
+        )
+    return current_user
+
+def get_current_unmuted_user(current_user: User = Depends(get_current_active_user)) -> User:
+    if current_user.is_muted:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account muted. You cannot create new content at this time."
+        )
+    return current_user
+
+def get_current_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
         )
     return current_user

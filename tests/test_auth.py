@@ -1,5 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.schemas.user import UserCreate
+from app.services.user_service import UserService
+
+
+def _create_user_via_service(db_session: Session, data: dict):
+    svc = UserService(db_session)
+    return svc.create_user(UserCreate(**data))
 
 
 def test_register_user(client: TestClient, test_user_data):
@@ -48,10 +57,10 @@ def test_register_weak_password(client: TestClient, test_user_data):
     assert response.status_code == 422  # Validation error
 
 
-def test_login_user(client: TestClient, test_user_data):
+def test_login_user(client: TestClient, db_session: Session, test_user_data):
     """Test user login"""
-    # Register user first
-    client.post("/auth/register", json=test_user_data)
+    # Create user via service (bypass register API rate limiter)
+    _create_user_via_service(db_session, test_user_data)
     
     # Login
     login_data = {
@@ -89,10 +98,10 @@ def test_login_nonexistent_user(client: TestClient):
     assert response.status_code == 401
 
 
-def test_get_current_user(client: TestClient, test_user_data):
+def test_get_current_user(client: TestClient, db_session: Session, test_user_data):
     """Test getting current user info"""
-    # Register and login
-    client.post("/auth/register", json=test_user_data)
+    # Create user via service (bypass register API rate limiter)
+    _create_user_via_service(db_session, test_user_data)
     login_response = client.post("/auth/login", json={
         "email": test_user_data["email"],
         "password": test_user_data["password"]

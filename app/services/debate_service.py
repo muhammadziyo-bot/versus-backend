@@ -6,6 +6,30 @@ from app.models.debate import Debate, Argument, BattleRoom, Vote, BattleRound, E
 from app.models.user import User
 from app.schemas.debate import DebateCreate, DebateList, DebateResponse
 
+ELO_K_FACTOR = 32
+ELO_SCALE = 400
+
+
+def _calculate_elo_updates(rating_a: int, rating_b: int, score_a: float) -> tuple[int, int]:
+    """
+    Calculate Elo rating updates using the standard Arpad Elo formula.
+    
+    Args:
+        rating_a: Current rating of player A
+        rating_b: Current rating of player B
+        score_a: Actual score for player A (1.0 = win, 0.5 = draw, 0.0 = loss)
+    
+    Returns:
+        Tuple of (new_rating_a, new_rating_b)
+    """
+    expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / ELO_SCALE))
+    expected_b = 1 / (1 + 10 ** ((rating_a - rating_b) / ELO_SCALE))
+    score_b = 1.0 - score_a
+    new_a = round(rating_a + ELO_K_FACTOR * (score_a - expected_a))
+    new_b = round(rating_b + ELO_K_FACTOR * (score_b - expected_b))
+    return max(0, new_a), max(0, new_b)
+
+
 class DebateService:
     def __init__(self, db: Session):
         self.db = db
@@ -325,41 +349,46 @@ class DebateService:
         battle_room.status = "completed"
         battle_room.completed_at = datetime.utcnow()
         
-        # Update ELO ratings: +8 for winner, -8 for loser
-        if battle_room.winner_side in ["pro", "con"]:
-            winner_id = battle_room.winner_user_id
-            loser_id = battle_room.con_user_id if battle_room.winner_side == "pro" else battle_room.pro_user_id
+        # Update ELO ratings using proper Arpad Elo formula
+        pro_user = self.db.query(User).filter(User.id == battle_room.pro_user_id).first()
+        con_user = self.db.query(User).filter(User.id == battle_room.con_user_id).first()
+        
+        if pro_user and con_user:
+            pro_old = pro_user.elo_rating or 400
+            con_old = con_user.elo_rating or 400
             
-            # Get users
-            winner = self.db.query(User).filter(User.id == winner_id).first()
-            loser = self.db.query(User).filter(User.id == loser_id).first()
+            if battle_room.winner_side == "pro":
+                pro_new, con_new = _calculate_elo_updates(pro_old, con_old, score_a=1.0)
+                pro_change = pro_new - pro_old
+                con_change = con_new - con_old
+            elif battle_room.winner_side == "con":
+                con_new, pro_new = _calculate_elo_updates(con_old, pro_old, score_a=1.0)
+                pro_change = pro_new - pro_old
+                con_change = con_new - con_old
+            else:
+                # Draw: both get 0.5 score
+                pro_new, con_new = _calculate_elo_updates(pro_old, con_old, score_a=0.5)
+                pro_change = pro_new - pro_old
+                con_change = con_new - con_old
             
-            if winner and loser:
-                # Update ELO ratings
-                winner_old_elo = winner.elo_rating or 400
-                loser_old_elo = loser.elo_rating or 400
-                
-                winner.elo_rating = winner_old_elo + 8
-                loser.elo_rating = loser_old_elo - 8
-                
-                # Create ELO history entries
-                winner_history = EloHistory(
-                    user_id=winner_id,
-                    battle_room_id=battle_room_id,
-                    old_elo=winner_old_elo,
-                    new_elo=winner.elo_rating,
-                    elo_change=8
-                )
-                loser_history = EloHistory(
-                    user_id=loser_id,
-                    battle_room_id=battle_room_id,
-                    old_elo=loser_old_elo,
-                    new_elo=loser.elo_rating,
-                    elo_change=-8
-                )
-                
-                self.db.add(winner_history)
-                self.db.add(loser_history)
+            pro_user.elo_rating = pro_new
+            con_user.elo_rating = con_new
+            
+            # Create ELO history entries for both participants
+            self.db.add(EloHistory(
+                user_id=battle_room.pro_user_id,
+                battle_room_id=battle_room_id,
+                old_elo=pro_old,
+                new_elo=pro_new,
+                elo_change=pro_change
+            ))
+            self.db.add(EloHistory(
+                user_id=battle_room.con_user_id,
+                battle_room_id=battle_room_id,
+                old_elo=con_old,
+                new_elo=con_new,
+                elo_change=con_change
+            ))
         
         self.db.commit()
     
@@ -448,16 +477,18 @@ class DebateService:
                     debate = self.db.query(Debate).filter(Debate.id == battle_room.debate_id).first()
                     
                     if round_obj and battle_room and debate:
-                        # Score pro argument
+                        # Score pro argument with con's argument as opponent context
                         if round_obj.pro_argument:
                             ai_service.score_argument(
-                                round_id, "pro", round_obj.pro_argument, debate.title
+                                round_id, "pro", round_obj.pro_argument, debate.title,
+                                opponent_argument=round_obj.con_argument
                             )
                         
-                        # Score con argument
+                        # Score con argument with pro's argument as opponent context
                         if round_obj.con_argument:
                             ai_service.score_argument(
-                                round_id, "con", round_obj.con_argument, debate.title
+                                round_id, "con", round_obj.con_argument, debate.title,
+                                opponent_argument=round_obj.pro_argument
                             )
                 finally:
                     db.close()

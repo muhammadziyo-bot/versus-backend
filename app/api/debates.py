@@ -4,7 +4,8 @@ from typing import List
 from app.database import get_db
 from app.schemas.debate import DebateCreate, DebateResponse, DebateList
 from app.services.debate_service import DebateService
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import get_current_active_user, get_current_unmuted_user
+from app.core.content_filter import contains_prohibited_content, get_filter_error_message
 from app.models.user import User
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -36,8 +37,10 @@ def create_debate(
     request: Request,
     debate: DebateCreate, 
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_unmuted_user)
 ):
+    if contains_prohibited_content(debate.title) or (debate.description and contains_prohibited_content(debate.description)):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
     debate_service = DebateService(db)
     return debate_service.create_debate(debate, created_by=current_user.id)
 

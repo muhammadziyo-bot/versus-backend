@@ -14,16 +14,15 @@ from app.core.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/friends", tags=["friends"])
 
-def send_friend_request_notification(receiver_id: int, requester_username: str, requester_id: int, request_id: int, db: Session):
+async def send_friend_request_notification(receiver_id: int, requester_username: str, requester_id: int, request_id: int, db: Session):
     """Send notification for friend request in background"""
     from app.services.notification_service import NotificationService
     from app.schemas.notification import NotificationCreate
     import json
-    import asyncio
     
     notification_service = NotificationService(db)
     
-    # Create notification without Telegram (sync)
+    # Create notification
     notification = notification_service.create_notification(
         NotificationCreate(
             user_id=receiver_id,
@@ -38,9 +37,10 @@ def send_friend_request_notification(receiver_id: int, requester_username: str, 
         )
     )
     
-    # Send Telegram notification in new event loop
+    # Send Telegram notification
     try:
-        asyncio.run(notification_service._send_telegram_notification(notification, db.query(User).filter(User.id == receiver_id).first()))
+        user = db.query(User).filter(User.id == receiver_id).first()
+        await notification_service._send_telegram_notification(notification, user)
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 

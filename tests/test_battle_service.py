@@ -14,14 +14,12 @@ def test_create_battle_room(db_session: Session):
         email="user1@example.com",
         username="user1",
         hashed_password="hashed_password",
-        skill_level="intermediate",
         elo_rating=1200
     )
     user2 = User(
         email="user2@example.com",
         username="user2",
         hashed_password="hashed_password",
-        skill_level="intermediate",
         elo_rating=1250
     )
     db_session.add(user1)

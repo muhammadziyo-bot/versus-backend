@@ -182,7 +182,7 @@ def test_update_user(db_session: Session):
     updated_user = user_service.update_user(user.id, update_data)
     
     assert updated_user.full_name == "Updated Name"
-    assert updated_user.bio == "This is bio"
+    assert updated_user.bio == "This is my bio"
 
 
 def test_update_nonexistent_user(db_session: Session):
@@ -207,11 +207,11 @@ def test_account_lockout_after_failed_attempts(db_session: Session):
     
     user_service.create_user(user_data)
     
-    # Attempt 5 failed logins
-    for i in range(5):
+    # Attempt 4 failed logins (5th attempt triggers lockout)
+    for i in range(4):
         user_service.authenticate_user(user_data.email, "wrongpassword")
     
-    # 6th attempt should raise account lockout error
+    # 5th attempt should raise account lockout error
     with pytest.raises(ValueError, match="locked"):
         user_service.authenticate_user(user_data.email, "wrongpassword")
     

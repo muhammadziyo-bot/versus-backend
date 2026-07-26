@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     debug: bool = False
     cors_origins: List[str] = ["http://localhost:5173"]
     base_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:5173"
     
     # Services
     telegram_bot_token: Optional[str] = None
