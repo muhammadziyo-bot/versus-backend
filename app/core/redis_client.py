@@ -22,12 +22,12 @@ class RedisClient:
                 )
                 # Test connection
                 self.client.ping()
-                print("✅ Redis connected successfully")
+                print("Redis connected successfully")
             except Exception as e:
-                print(f"⚠️ Redis connection failed, using in-memory fallback: {e}")
+                print(f"Redis connection failed, using in-memory fallback: {e}")
                 self.enabled = False
         else:
-            print("⚠️ Redis not configured, using in-memory fallback")
+            print("WARNING: Redis not configured, using in-memory fallback")
     
     def set(self, key: str, value: Any, expire: int = 3600) -> bool:
         """Set a key-value pair with expiration"""
