@@ -428,6 +428,8 @@ class WebSocketManager:
                     "status": battle.status,
                     "current_round": battle.current_round,
                     "round_time_limit": battle.round_time_limit,
+                    "pro_user_id": battle.pro_user_id,
+                    "con_user_id": battle.con_user_id,
                     "started_at": battle.started_at.isoformat() if battle.started_at else None,
                     "round_ends_at": battle.round_ends_at.isoformat() if battle.round_ends_at else None
                 },
