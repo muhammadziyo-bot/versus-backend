@@ -6,6 +6,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from pathlib import Path
 from app.config import settings
+from sqlalchemy import text
 from app.database import engine, Base, SessionLocal
 from app.api import auth, debates, clubs, users, discussions, battles, websocket_endpoints, matchmaking, notifications, friends, moderation as moderation_api
 from app.models import user, debate, club, notification, friend, moderation
@@ -38,6 +39,28 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Run schema migration on startup so the app self-heals if Supabase pooler
+# routes to a database instance that missed a migration
+@app.on_event("startup")
+def run_schema_migration():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false"))
+            conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT false"))
+            conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false"))
+            conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS score_status VARCHAR(50) DEFAULT 'pending'"))
+            conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0"))
+            conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS error_message TEXT"))
+            conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS community_average_score INTEGER"))
+            conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS score_deviation INTEGER"))
+            conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS calibration_status VARCHAR(50) DEFAULT 'pending'"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS reports (id SERIAL PRIMARY KEY, reporter_id INTEGER REFERENCES app_users(id) NOT NULL, reported_user_id INTEGER REFERENCES app_users(id) NOT NULL, target_type VARCHAR NOT NULL, target_id INTEGER NOT NULL, reason VARCHAR NOT NULL, description TEXT, status VARCHAR DEFAULT 'pending', resolved_by INTEGER REFERENCES app_users(id), resolution VARCHAR, resolution_note TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), resolved_at TIMESTAMP WITH TIME ZONE)"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS user_bans (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES app_users(id) NOT NULL, banned_by INTEGER REFERENCES app_users(id) NOT NULL, reason TEXT NOT NULL, ban_type VARCHAR DEFAULT 'mute', is_active BOOLEAN DEFAULT true, expires_at TIMESTAMP WITH TIME ZONE, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), lifted_at TIMESTAMP WITH TIME ZONE, lifted_by INTEGER REFERENCES app_users(id))"))
+            conn.commit()
+            logger.info("Startup schema migration completed")
+    except Exception as e:
+        logger.warning(f"Schema migration check skipped: {e}")
 
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
