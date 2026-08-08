@@ -231,8 +231,22 @@ class DiscussionService:
         
         self.db.commit()
         self.db.refresh(discussion)
-        
-        return self.get_discussion_by_id(discussion_id, user_id)
+
+        # Determine the user's current vote state after the toggle
+        final_vote = None
+        if user_id:
+            existing_vote = self.db.query(DiscussionVote).filter(
+                DiscussionVote.user_id == user_id,
+                DiscussionVote.discussion_id == discussion_id
+            ).first()
+            final_vote = existing_vote.vote_type if existing_vote else None
+
+        return {
+            "id": discussion_id,
+            "upvotes": discussion.upvotes,
+            "downvotes": discussion.downvotes,
+            "user_vote": final_vote,
+        }
 
     def vote_comment(self, comment_id: int, vote_type: str, user_id: int = None) -> Optional[Comment]:
         comment = self.db.query(ClubComment).filter(
@@ -287,13 +301,21 @@ class DiscussionService:
         
         self.db.commit()
         self.db.refresh(comment)
-        
-        # Get user votes for the response
-        user_comment_votes = {}
+
+        # Determine the user's current vote state after the toggle
+        final_vote = None
         if user_id:
-            comment_votes = self.db.query(CommentVote).filter(
-                CommentVote.user_id == user_id
-            ).all()
-            user_comment_votes = {vote.comment_id: vote.vote_type for vote in comment_votes}
-        
-        return self._build_comment_tree(comment, user_comment_votes)
+            existing_vote = self.db.query(CommentVote).filter(
+                CommentVote.user_id == user_id,
+                CommentVote.comment_id == comment_id
+            ).first()
+            final_vote = existing_vote.vote_type if existing_vote else None
+
+        return {
+            "id": comment_id,
+            "discussion_id": comment.discussion_id,
+            "author_id": comment.author_id,
+            "upvotes": comment.upvotes,
+            "downvotes": comment.downvotes,
+            "user_vote": final_vote,
+        }

@@ -186,7 +186,7 @@ def create_comment(
     
     return new_comment
 
-@router.post("/{discussion_id}/vote", response_model=DiscussionDetail)
+@router.post("/{discussion_id}/vote")
 def vote_discussion(
     discussion_id: int,
     vote: VoteRequest,
@@ -213,7 +213,7 @@ def get_my_votes(
         for vote in votes
     }
 
-@comments_router.post("/{comment_id}/vote", response_model=Comment)
+@comments_router.post("/{comment_id}/vote")
 def vote_comment(
     comment_id: int,
     vote: VoteRequest,
@@ -227,17 +227,17 @@ def vote_comment(
         raise HTTPException(status_code=404, detail="Comment not found")
     
     # Get discussion details for notification
-    discussion = db.query(ClubDiscussion).filter(ClubDiscussion.id == comment.discussion_id).first()
+    discussion = db.query(ClubDiscussion).filter(ClubDiscussion.id == comment["discussion_id"]).first()
     # Only send like notification for comments (no dislike button in UI for nested comments)
-    if comment.author_id != current_user.id and vote.vote_type == 'up':  # Don't notify if voting on own comment or if unliking
+    if comment["author_id"] != current_user.id and vote.vote_type == 'up':  # Don't notify if voting on own comment or if unliking
         # Send like notification to comment author
         background_tasks.add_task(
             send_comment_like_notification,
-            comment.author_id,
+            comment["author_id"],
             current_user.username,
             discussion.title if discussion else "Unknown topic",
             vote.vote_type,
-            comment.discussion_id,
+            comment["discussion_id"],
             db
         )
     
