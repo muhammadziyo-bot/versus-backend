@@ -16,7 +16,7 @@ from slowapi.util import get_remote_address
 
 class ClubMessageCreate(BaseModel):
     content: str
-    parent_id: int = None
+    parent_id: Optional[int] = None
 
 router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 limiter = Limiter(key_func=get_remote_address)
