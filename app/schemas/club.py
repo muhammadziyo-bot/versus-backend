@@ -44,6 +44,12 @@ class ClubBase(BaseModel):
 class ClubCreate(ClubBase):
     pass
 
+class ClubUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    badge: Optional[str] = None
+
 class Club(ClubBase):
     id: int
     founder_id: int
@@ -70,14 +76,21 @@ class ClubList(BaseModel):
     badge: str
     member_count: int = 0
     active_battles: int = 0
+    discussion_count: int = 0
     is_member: bool = False
     founder: str
     
     class Config:
         from_attributes = True
 
+class ClubSearchResult(BaseModel):
+    total: int = 0
+    items: List[ClubList] = []
+
 class ClubResponse(Club):
+    founder: str
     members: List[ClubMember] = []
     member_count: int = 0
     active_battles: int = 0
+    discussion_count: int = 0
     is_member: bool = False
