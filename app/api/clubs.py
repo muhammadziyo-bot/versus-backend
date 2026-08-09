@@ -6,26 +6,17 @@ from app.schemas.club import (
     ClubCreate, ClubUpdate, ClubResponse, ClubList, ClubSearchResult
 )
 from app.services.club_service import ClubService
-from app.services.discussion_service import DiscussionService
 from app.models.user import User
 from app.models.club import Club, ClubDiscussion, ClubComment, club_members
-from app.models.vote import DiscussionVote, CommentVote
 from app.core.dependencies import get_current_user, get_current_user_optional, get_current_unmuted_user
 from app.core.content_filter import contains_prohibited_content, get_filter_error_message
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-class ClubDiscussionCreate(BaseModel):
-    title: str
-    content: str
-
-class ClubCommentCreate(BaseModel):
+class ClubMessageCreate(BaseModel):
     content: str
     parent_id: int = None
-
-class ClubVoteRequest(BaseModel):
-    vote_type: str  # 'up' or 'down'
 
 router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 limiter = Limiter(key_func=get_remote_address)
@@ -295,173 +286,157 @@ def get_club_members(club_id: int, db: Session = Depends(get_db)):
     return members
 
 
-@router.get("/{club_id}/discussions")
-def get_club_discussions(
-    club_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_optional),
-):
-    """Get all discussions for a club"""
-    club = db.query(Club).filter(Club.id == club_id).first()
-    if not club:
-        raise HTTPException(status_code=404, detail="Club not found")
-
-    discussions = db.query(ClubDiscussion).filter(
-        ClubDiscussion.club_id == club_id,
-        ClubDiscussion.is_active == True
-    ).order_by(ClubDiscussion.created_at.desc()).all()
-
-    # Get user's votes across these discussions
-    user_votes = {}
-    if current_user:
-        discussion_ids = [d.id for d in discussions]
-        if discussion_ids:
-            votes = db.query(DiscussionVote).filter(
-                DiscussionVote.user_id == current_user.id,
-                DiscussionVote.discussion_id.in_(discussion_ids)
-            ).all()
-            user_votes = {v.discussion_id: v.vote_type for v in votes}
-
-    result = []
-    for discussion in discussions:
-        comment_count = db.query(ClubComment).filter(
-            ClubComment.discussion_id == discussion.id
-        ).count()
-        result.append({
-            "id": discussion.id,
-            "title": discussion.title,
-            "content": discussion.content,
-            "author_id": discussion.author_id,
-            "author": discussion.author.username if discussion.author else "Unknown",
-            "upvotes": discussion.upvotes,
-            "downvotes": discussion.downvotes,
-            "comment_count": comment_count,
-            "user_vote": user_votes.get(discussion.id),
-            "created_at": discussion.created_at.isoformat() if discussion.created_at else None
-        })
-
-    return result
-
-
-@router.post("/{club_id}/discussions")
-@limiter.limit("20/minute")
-def create_club_discussion(
-    request: Request,
-    club_id: int,
-    discussion: ClubDiscussionCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_unmuted_user)
-):
-    """Create a new discussion in a club"""
-    if contains_prohibited_content(discussion.title) or contains_prohibited_content(discussion.content):
-        raise HTTPException(status_code=400, detail=get_filter_error_message())
-
-    club = db.query(Club).filter(Club.id == club_id).first()
-    if not club:
-        raise HTTPException(status_code=404, detail="Club not found")
-
-    # Check if user is a member
-    is_member = db.execute(
+def _is_member(db: Session, club_id: int, user_id: int) -> bool:
+    return db.execute(
         club_members.select().where(
             (club_members.c.club_id == club_id) &
-            (club_members.c.user_id == current_user.id)
+            (club_members.c.user_id == user_id)
         )
-    ).first()
+    ).first() is not None
 
-    if not is_member:
-        raise HTTPException(status_code=403, detail="Must be a member to create discussions")
 
-    new_discussion = ClubDiscussion(
-        title=discussion.title,
-        content=discussion.content,
-        author_id=current_user.id,
-        club_id=club_id
-    )
-
-    db.add(new_discussion)
-    db.commit()
-    db.refresh(new_discussion)
-
+def _serialize_message(db: Session, message: ClubDiscussion) -> dict:
+    replies = db.query(ClubComment).filter(
+        ClubComment.discussion_id == message.id,
+        ClubComment.parent_id.is_(None)
+    ).order_by(ClubComment.created_at.asc()).all()
     return {
-        "id": new_discussion.id,
-        "title": new_discussion.title,
-        "content": new_discussion.content,
-        "author_id": new_discussion.author_id,
-        "author": current_user.username,
-        "created_at": new_discussion.created_at.isoformat() if new_discussion.created_at else None
+        "id": message.id,
+        "content": message.content,
+        "author_id": message.author_id,
+        "author": message.author.username if message.author else "Unknown",
+        "avatar_url": message.author.avatar_url if message.author else None,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+        "replies": [_serialize_reply(db, r) for r in replies]
     }
 
 
-@router.post("/{club_id}/discussions/{discussion_id}/vote")
-@limiter.limit("30/minute")
-def vote_club_discussion(
+def _serialize_reply(db: Session, reply: ClubComment) -> dict:
+    return {
+        "id": reply.id,
+        "content": reply.content,
+        "author_id": reply.author_id,
+        "author": reply.author.username if reply.author else "Unknown",
+        "avatar_url": reply.author.avatar_url if reply.author else None,
+        "parent_id": reply.parent_id,
+        "created_at": reply.created_at.isoformat() if reply.created_at else None,
+        "replies": [
+            _serialize_reply(db, r) for r in db.query(ClubComment).filter(
+                ClubComment.parent_id == reply.id
+            ).order_by(ClubComment.created_at.asc()).all()
+        ]
+    }
+
+
+@router.get("/{club_id}/chat")
+@limiter.limit("60/minute")
+def get_club_chat(
     request: Request,
     club_id: int,
-    discussion_id: int,
-    vote: ClubVoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get the casual chat feed for a club (members only)."""
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+    if not _is_member(db, club_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Must be a member to view club chat")
+
+    messages = db.query(ClubDiscussion).filter(
+        ClubDiscussion.club_id == club_id,
+        ClubDiscussion.is_active == True
+    ).order_by(ClubDiscussion.created_at.asc()).all()
+
+    return [_serialize_message(db, m) for m in messages]
+
+
+@router.post("/{club_id}/chat")
+@limiter.limit("20/minute")
+def post_club_message(
+    request: Request,
+    club_id: int,
+    payload: ClubMessageCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_unmuted_user)
 ):
-    """Toggle a vote on a club discussion"""
-    discussion_service = DiscussionService(db)
-    result = discussion_service.vote_discussion(discussion_id, vote.vote_type, current_user.id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Discussion not found")
-    return result
-
-
-@router.post("/{club_id}/discussions/{discussion_id}/comments")
-@limiter.limit("30/minute")
-def create_club_comment(
-    request: Request,
-    club_id: int,
-    discussion_id: int,
-    comment: ClubCommentCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_unmuted_user)
-):
-    """Create a comment on a club discussion"""
-    if contains_prohibited_content(comment.content):
+    """Post a message to the club chat (members only)."""
+    if contains_prohibited_content(payload.content):
         raise HTTPException(status_code=400, detail=get_filter_error_message())
 
     club = db.query(Club).filter(Club.id == club_id).first()
     if not club:
         raise HTTPException(status_code=404, detail="Club not found")
+    if not _is_member(db, club_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Must be a member to post in club chat")
 
-    discussion = db.query(ClubDiscussion).filter(
-        ClubDiscussion.id == discussion_id,
-        ClubDiscussion.club_id == club_id
-    ).first()
-
-    if not discussion:
-        raise HTTPException(status_code=404, detail="Discussion not found")
-
-    # Check if user is a member
-    is_member = db.execute(
-        club_members.select().where(
-            (club_members.c.club_id == club_id) &
-            (club_members.c.user_id == current_user.id)
-        )
-    ).first()
-
-    if not is_member:
-        raise HTTPException(status_code=403, detail="Must be a member to comment")
-
-    new_comment = ClubComment(
-        content=comment.content,
+    # Auto-generate a hidden title so the row fits the shared model
+    title = payload.content.strip().splitlines()[0][:60] or "Message"
+    new_message = ClubDiscussion(
+        title=title,
+        content=payload.content,
         author_id=current_user.id,
-        discussion_id=discussion_id,
-        parent_id=comment.parent_id
+        club_id=club_id
     )
-
-    db.add(new_comment)
+    db.add(new_message)
     db.commit()
-    db.refresh(new_comment)
+    db.refresh(new_message)
 
     return {
-        "id": new_comment.id,
-        "content": new_comment.content,
-        "author_id": new_comment.author_id,
-        "discussion_id": new_comment.discussion_id,
-        "created_at": new_comment.created_at.isoformat() if new_comment.created_at else None
+        "id": new_message.id,
+        "content": new_message.content,
+        "author_id": new_message.author_id,
+        "author": current_user.username,
+        "avatar_url": current_user.avatar_url,
+        "created_at": new_message.created_at.isoformat() if new_message.created_at else None,
+        "replies": []
+    }
+
+
+@router.post("/{club_id}/chat/{message_id}/reply")
+@limiter.limit("20/minute")
+def reply_to_club_message(
+    request: Request,
+    club_id: int,
+    message_id: int,
+    payload: ClubMessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_unmuted_user)
+):
+    """Reply to a message in the club chat (members only)."""
+    if contains_prohibited_content(payload.content):
+        raise HTTPException(status_code=400, detail=get_filter_error_message())
+
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+    if not _is_member(db, club_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Must be a member to reply in club chat")
+
+    message = db.query(ClubDiscussion).filter(
+        ClubDiscussion.id == message_id,
+        ClubDiscussion.club_id == club_id
+    ).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    new_reply = ClubComment(
+        content=payload.content,
+        author_id=current_user.id,
+        discussion_id=message_id,
+        parent_id=payload.parent_id
+    )
+    db.add(new_reply)
+    db.commit()
+    db.refresh(new_reply)
+
+    return {
+        "id": new_reply.id,
+        "content": new_reply.content,
+        "author_id": new_reply.author_id,
+        "author": current_user.username,
+        "avatar_url": current_user.avatar_url,
+        "parent_id": new_reply.parent_id,
+        "created_at": new_reply.created_at.isoformat() if new_reply.created_at else None,
+        "replies": []
     }

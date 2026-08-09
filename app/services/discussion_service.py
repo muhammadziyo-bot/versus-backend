@@ -11,7 +11,9 @@ class DiscussionService:
         self.db = db
 
     def get_discussions(self, skip: int = 0, limit: int = 100, user_id: int = None) -> List[DiscussionList]:
-        discussions = self.db.query(ClubDiscussion).join(User).outerjoin(Club).order_by(
+        discussions = self.db.query(ClubDiscussion).join(User).outerjoin(Club).filter(
+            ClubDiscussion.club_id.is_(None)
+        ).order_by(
             ClubDiscussion.created_at.desc()
         ).offset(skip).limit(limit).all()
         
@@ -55,13 +57,16 @@ class DiscussionService:
         return result
 
     def get_stats(self) -> dict:
-        total_discussions = self.db.query(ClubDiscussion).count()
+        total_discussions = self.db.query(ClubDiscussion).filter(
+            ClubDiscussion.club_id.is_(None)
+        ).count()
         total_replies = self.db.query(ClubComment).count()
         
         # Active discussions (with recent activity)
         from datetime import datetime, timedelta
         recent_cutoff = datetime.utcnow() - timedelta(days=7)
         active_discussions = self.db.query(ClubDiscussion).filter(
+            ClubDiscussion.club_id.is_(None),
             ClubDiscussion.updated_at >= recent_cutoff
         ).count()
         
@@ -91,7 +96,7 @@ class DiscussionService:
             ClubDiscussion.id == discussion_id
         ).first()
         
-        if not discussion:
+        if not discussion or discussion.club_id is not None:
             return None
         
         # Increment view count
