@@ -197,13 +197,6 @@ class WebSocketManager:
             
             if not self.user_connections[user_id]:
                 del self.user_connections[user_id]
-                # No remaining connections anywhere - mark user offline
-                from app.models.user import User
-                user = db.query(User).filter(User.id == user_id).first()
-                if user and user.is_online:
-                    user.is_online = False
-                    user.last_seen = datetime.utcnow()
-                    db.commit()
 
     async def send_to_user(self, user_id: int, message: Dict[str, Any]):
         """Send a message to a specific user"""
