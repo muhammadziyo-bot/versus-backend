@@ -44,7 +44,7 @@ class BattleRoom(Base):
     status = Column(String, default="waiting")  # waiting, active, completed
     current_round = Column(Integer, default=1)
     max_rounds = Column(Integer, default=3)
-    round_time_limit = Column(Integer, default=300)  # seconds
+    round_time_limit = Column(Integer, default=600)  # seconds (10 minutes)
     
     # Enhanced battle timing
     started_at = Column(DateTime(timezone=True))
@@ -104,6 +104,25 @@ class BattleRound(Base):
     completed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # Relationships
+    battle_room = relationship("BattleRoom")
+
+class BattleTurn(Base):
+    """A single exchange (pro or con argument) within a timed round.
+
+    A round is a fixed-duration window during which pro and con trade
+    arguments back and forth. Each submission creates a new BattleTurn row.
+    """
+    __tablename__ = "battle_turns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    battle_room_id = Column(Integer, ForeignKey("battle_rooms.id"), nullable=False)
+    round_number = Column(Integer, nullable=False, default=1)
+    turn_number = Column(Integer, nullable=False, default=1)  # 1, 2, 3... within the round
+    side = Column(String, nullable=False)  # "pro" or "con"
+    argument = Column(Text, nullable=False)
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now())
+
     # Relationships
     battle_room = relationship("BattleRoom")
 

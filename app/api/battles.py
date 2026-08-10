@@ -160,6 +160,22 @@ class BattleRoundResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class BattleTurnResponse(BaseModel):
+    id: int
+    battle_room_id: int
+    round_number: int
+    turn_number: int
+    side: str
+    argument: str
+    submitted_at: datetime
+
+    @field_serializer('submitted_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+
+    class Config:
+        from_attributes = True
+
 class VoteResponse(BaseModel):
     id: int
     battle_room_id: int
@@ -439,6 +455,31 @@ def get_battle_rounds(
     
     rounds = debate_service.get_battle_rounds(battle_id)
     return rounds
+
+@router.get("/{battle_id}/turns", response_model=List[BattleTurnResponse])
+def get_battle_turns(
+    battle_id: int,
+    round_number: Optional[int] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get all turns (exchanges) for a battle room, optionally filtered by round"""
+    debate_service = DebateService(db)
+
+    battle_room = debate_service.get_battle_room(battle_id)
+    if not battle_room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Battle room not found"
+        )
+
+    if current_user.id not in [battle_room.pro_user_id, battle_room.con_user_id]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not part of this battle"
+        )
+
+    return debate_service.get_battle_turns(battle_id, round_number)
 
 @router.post("/{battle_id}/vote", response_model=VoteResponse)
 @limiter.limit("10/minute")

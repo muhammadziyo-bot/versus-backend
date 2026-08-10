@@ -63,6 +63,7 @@ class WebSocketManager:
         # Send current battle state
         rounds = debate_service.get_battle_rounds(battle_room_id)
         votes = debate_service.get_battle_votes(battle_room_id)
+        turns = debate_service.get_battle_turns(battle_room_id)
         
         # Get user info for both participants
         from app.models.user import User
@@ -128,6 +129,17 @@ class WebSocketManager:
                         "created_at": vote.created_at.isoformat()
                     }
                     for vote in votes
+                ],
+                "turns": [
+                    {
+                        "id": turn.id,
+                        "round_number": turn.round_number,
+                        "turn_number": turn.turn_number,
+                        "side": turn.side,
+                        "argument": turn.argument,
+                        "submitted_at": turn.submitted_at.isoformat() if turn.submitted_at else None
+                    }
+                    for turn in turns
                 ]
             },
             "timestamp": datetime.utcnow().isoformat()
@@ -251,6 +263,10 @@ class WebSocketManager:
                 # Handle battle start
                 await self._handle_battle_start(battle_room_id, user_id, db)
             
+            elif message_type == "round_timeout":
+                # Handle round timer expiry
+                await self._handle_round_timeout(battle_room_id, data.get("round_number", 1), db)
+            
             elif message_type == "heartbeat":
                 # Handle heartbeat
                 await websocket.send_text(json.dumps({
@@ -263,6 +279,7 @@ class WebSocketManager:
                 battle = debate_service.get_battle_room(battle_room_id)
                 rounds = debate_service.get_battle_rounds(battle_room_id)
                 votes = debate_service.get_battle_votes(battle_room_id)
+                turns = debate_service.get_battle_turns(battle_room_id)
                 
                 await websocket.send_text(json.dumps({
                     "type": "battle_state",
@@ -310,6 +327,17 @@ class WebSocketManager:
                                 "created_at": vote.created_at.isoformat()
                             }
                             for vote in votes
+                        ],
+                        "turns": [
+                            {
+                                "id": turn.id,
+                                "round_number": turn.round_number,
+                                "turn_number": turn.turn_number,
+                                "side": turn.side,
+                                "argument": turn.argument,
+                                "submitted_at": turn.submitted_at.isoformat() if turn.submitted_at else None
+                            }
+                            for turn in turns
                         ]
                     },
                     "timestamp": datetime.utcnow().isoformat()
@@ -359,14 +387,13 @@ class WebSocketManager:
         await self.broadcast_to_battle(battle_room_id, message)
 
     async def _handle_argument_submission(self, battle_room_id: int, user_id: int, data: Dict[str, Any], db: Session):
-        """Handle argument submission"""
+        """Handle argument submission - a turn within the timed round"""
         debate_service = DebateService(db)
         
         try:
             argument = data.get("argument", "").strip()
-            round_number = data.get("round_number", 1)
             
-            logger.info(f"Argument submission from user {user_id} for round {round_number}: {argument[:50]}...")
+            logger.info(f"Argument submission from user {user_id}: {argument[:50]}...")
             
             if not argument:
                 await self.send_to_user(user_id, {
@@ -376,54 +403,62 @@ class WebSocketManager:
                 })
                 return
             
-            # Submit argument
-            round_obj = debate_service.submit_round_argument(battle_room_id, round_number, argument, user_id)
-            logger.info(f"Argument submitted successfully, round status: {round_obj.status}")
+            # Submit turn (continuous pro/con exchange within the round)
+            turn = debate_service.submit_turn(battle_room_id, user_id, argument)
+            logger.info(f"Turn submitted: round={turn.round_number} turn={turn.turn_number} side={turn.side}")
             
-            # Determine user's side
-            battle = debate_service.get_battle_room(battle_room_id)
-            user_side = "pro" if user_id == battle.pro_user_id else "con"
-            
-            # Broadcast argument submission
+            # Broadcast turn submission
             await self.broadcast_to_battle(battle_room_id, {
-                "type": "argument_submitted",
+                "type": "turn_submitted",
                 "data": {
-                    "round_number": round_number,
-                    "side": user_side,
-                    "argument": argument,
-                    "submitted_at": datetime.utcnow().isoformat()
+                    "id": turn.id,
+                    "round_number": turn.round_number,
+                    "turn_number": turn.turn_number,
+                    "side": turn.side,
+                    "argument": turn.argument,
+                    "submitted_at": turn.submitted_at.isoformat() if turn.submitted_at else datetime.utcnow().isoformat()
                 },
                 "timestamp": datetime.utcnow().isoformat()
             })
-            logger.info(f"Broadcasted argument_submitted event for round {round_number}")
-            
-            # Check if round is complete
-            if round_obj.status == "completed":
-                await self.broadcast_to_battle(battle_room_id, {
-                    "type": "round_completed",
-                    "data": {
-                        "round_number": round_number,
-                        "next_round": battle.current_round if battle.status == "active" else None
-                    },
-                    "timestamp": datetime.utcnow().isoformat()
-                })
-            
-            # If battle is completed, broadcast completion
-            if battle.status == "completed":
-                await self.broadcast_to_battle(battle_room_id, {
-                    "type": "battle_completed",
-                    "data": {
-                        "winner_side": battle.winner_side,
-                        "winner_user_id": battle.winner_user_id,
-                        "completed_at": battle.completed_at.isoformat() if battle.completed_at else None
-                    },
-                    "timestamp": datetime.utcnow().isoformat()
-                })
+            logger.info(f"Broadcasted turn_submitted event for round {turn.round_number} turn {turn.turn_number}")
         
         except ValueError as e:
             await self.send_to_user(user_id, {
                 "type": "error",
                 "data": {"message": str(e)},
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+    async def _handle_round_timeout(self, battle_room_id: int, round_number: int, db: Session):
+        """Handle round timer expiry - advance to next round or complete the battle"""
+        debate_service = DebateService(db)
+        battle = debate_service.get_battle_room(battle_room_id)
+        if not battle or battle.status != "active":
+            return
+        # Only advance if the timeout is for the currently active round
+        if round_number != battle.current_round:
+            return
+
+        battle = debate_service.end_current_round(battle_room_id)
+
+        if battle.status == "completed":
+            await self.broadcast_to_battle(battle_room_id, {
+                "type": "battle_completed",
+                "data": {
+                    "winner_side": battle.winner_side,
+                    "winner_user_id": battle.winner_user_id,
+                    "completed_at": battle.completed_at.isoformat() if battle.completed_at else None
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        else:
+            await self.broadcast_to_battle(battle_room_id, {
+                "type": "round_completed",
+                "data": {
+                    "round_number": battle.current_round - 1,
+                    "next_round": battle.current_round,
+                    "round_ends_at": battle.round_ends_at.isoformat() if battle.round_ends_at else None
+                },
                 "timestamp": datetime.utcnow().isoformat()
             })
 

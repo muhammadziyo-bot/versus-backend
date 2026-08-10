@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
 import asyncio
-from app.models.debate import Debate, Argument, BattleRoom, Vote, BattleRound, EloHistory
+from app.models.debate import Debate, Argument, BattleRoom, Vote, BattleRound, BattleTurn, EloHistory
 from app.models.user import User
 from app.schemas.debate import DebateCreate, DebateList, DebateResponse
 
@@ -458,7 +458,90 @@ class DebateService:
     def get_battle_votes(self, battle_room_id: int) -> list:
         """Get all votes for a battle"""
         return self.db.query(Vote).filter(Vote.battle_room_id == battle_room_id).all()
-    
+
+    def get_battle_turns(self, battle_room_id: int, round_number: int = None) -> list:
+        """Get all turns (exchanges) for a battle room, optionally filtered by round"""
+        query = self.db.query(BattleTurn).filter(BattleTurn.battle_room_id == battle_room_id)
+        if round_number is not None:
+            query = query.filter(BattleTurn.round_number == round_number)
+        return query.order_by(BattleTurn.turn_number).all()
+
+    def submit_turn(self, battle_room_id: int, user_id: int, argument: str) -> BattleTurn:
+        """Submit a turn (an argument) in the active round.
+
+        Rounds are timed windows. Within a round, pro and con trade arguments
+        back and forth (pro, con, pro, con...) until the round timer expires.
+        """
+        battle_room = self.db.query(BattleRoom).filter(BattleRoom.id == battle_room_id).first()
+        if not battle_room:
+            raise ValueError("Battle room not found")
+
+        if battle_room.status != "active":
+            raise ValueError("The battle is not active right now")
+
+        if user_id not in (battle_room.pro_user_id, battle_room.con_user_id):
+            raise ValueError("You are not part of this battle")
+
+        if not argument or not argument.strip():
+            raise ValueError("Argument cannot be empty")
+
+        user_side = "pro" if user_id == battle_room.pro_user_id else "con"
+
+        turn_count = self.db.query(BattleTurn).filter(
+            BattleTurn.battle_room_id == battle_room_id,
+            BattleTurn.round_number == battle_room.current_round
+        ).count()
+        turn_number = turn_count + 1
+
+        # Pro always speaks first each round, then they alternate.
+        expected_side = "pro" if turn_number % 2 == 1 else "con"
+        if user_side != expected_side:
+            raise ValueError("It is not your turn yet. Wait for your opponent to respond.")
+
+        turn = BattleTurn(
+            battle_room_id=battle_room_id,
+            round_number=battle_room.current_round,
+            turn_number=turn_number,
+            side=user_side,
+            argument=argument.strip()
+        )
+        self.db.add(turn)
+        self.db.commit()
+        self.db.refresh(turn)
+        return turn
+
+    def end_current_round(self, battle_room_id: int) -> BattleRoom:
+        """End the current timed round. Advance to the next round or complete the battle."""
+        battle_room = self.db.query(BattleRoom).filter(BattleRoom.id == battle_room_id).first()
+        if not battle_room or battle_room.status != "active":
+            return battle_room
+
+        if battle_room.current_round < battle_room.max_rounds:
+            # Advance to the next round and restart its timer
+            battle_room.current_round += 1
+            battle_room.round_started_at = datetime.utcnow()
+            battle_room.round_ends_at = datetime.utcnow() + timedelta(seconds=battle_room.round_time_limit)
+            # Activate the next round's BattleRound row so the UI timer runs
+            next_round = self.db.query(BattleRound).filter(
+                and_(
+                    BattleRound.battle_room_id == battle_room_id,
+                    BattleRound.round_number == battle_room.current_round
+                )
+            ).first()
+            if next_round:
+                next_round.status = "active"
+                next_round.started_at = datetime.utcnow()
+        else:
+            # Last round has ended - complete the battle
+            battle_room.status = "completed"
+            battle_room.completed_at = datetime.utcnow()
+            battle_room.winner_side = "draw"
+            battle_room.winner_user_id = None
+
+        self.db.commit()
+        self.db.refresh(battle_room)
+        return battle_room
+
     def _trigger_ai_scoring(self, battle_room_id: int, round_id: int):
         """Trigger AI scoring for a completed round in background"""
         try:
