@@ -357,26 +357,6 @@ def is_compatible(user1: dict, user2: dict) -> bool:
     
     return True
 
-@router.get("/online")
-async def get_online_users(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Get list of online users (simplified version)"""
-    # In production, this would use a proper online tracking system
-    users = db.query(User).filter(User.id != current_user.id).limit(20).all()
-    
-    return [
-        {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "elo_rating": getattr(user, 'elo_rating', 400),
-            "is_online": True  # Simplified - in production track actual online status
-        }
-        for user in users
-    ]
-
 @router.get("/search")
 async def search_users(
     q: str,

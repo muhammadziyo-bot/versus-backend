@@ -84,24 +84,6 @@ def search_users(q: str, db: Session = Depends(get_db)):
         for user in users
     ]
 
-@router.get("/online")
-def get_online_users(db: Session = Depends(get_db)):
-    """Get list of online users (simplified version)"""
-    # In production, this would use a proper online tracking system
-    users = db.query(User).limit(20).all()
-    
-    return [
-        {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "full_name": user.full_name,
-            "elo_rating": getattr(user, 'elo_rating', 400),
-            "is_online": True  # Simplified - in production track actual online status
-        }
-        for user in users
-    ]
-
 @router.put("/profile")
 def update_profile(
     profile_data: UserUpdate,

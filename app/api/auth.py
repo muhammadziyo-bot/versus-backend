@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 from app.database import get_db
 from app.schemas.user import UserCreate, UserLogin, Token, User
 from app.services.user_service import UserService
@@ -61,6 +61,11 @@ def login(request: Request, user_login: UserLogin, db: Session = Depends(get_db)
             detail="Inactive user"
         )
     
+    # Mark user as online
+    if not user.is_online:
+        user.is_online = True
+        db.commit()
+    
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
@@ -90,7 +95,8 @@ def get_current_user_info(current_user: User = Depends(get_current_active_user))
         "full_name": current_user.full_name,
         "elo_rating": current_user.elo_rating or 400,
         "is_active": current_user.is_active,
-        "is_verified": current_user.is_verified
+        "is_verified": current_user.is_verified,
+        "is_online": current_user.is_online
     }
 
 @router.get("/users")
@@ -122,7 +128,13 @@ def refresh_token(current_user: User = Depends(get_current_active_user)):
     }
 
 @router.post("/logout")
-def logout():
-    # In a real app, you might want to invalidate the token
-    # For now, we'll just return success
+def logout(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Logout - mark user as offline"""
+    if current_user.is_online:
+        current_user.is_online = False
+        current_user.last_seen = datetime.utcnow()
+        db.commit()
     return {"message": "Successfully logged out"}

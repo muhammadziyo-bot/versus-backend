@@ -28,6 +28,10 @@ class User(Base):
     telegram_username = Column(String, unique=True, index=True)
     telegram_chat_id = Column(String, unique=True, index=True)
     
+    # Presence fields
+    is_online = Column(Boolean, default=False)
+    last_seen = Column(DateTime(timezone=True), nullable=True)
+
     # Moderation fields
     is_admin = Column(Boolean, default=False)
     is_muted = Column(Boolean, default=False)

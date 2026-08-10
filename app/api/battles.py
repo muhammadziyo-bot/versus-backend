@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
@@ -10,7 +11,7 @@ from app.services.ai_scoring_service import AIScoringService
 from app.core.dependencies import get_current_active_user, get_current_unmuted_user
 from app.core.content_filter import contains_prohibited_content, get_filter_error_message
 from app.models.user import User
-from app.models.debate import Debate
+from app.models.debate import Debate, BattleRoom
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -549,13 +550,14 @@ def get_user_battles(
 def get_battle_stats(
     db: Session = Depends(get_db)
 ):
-    """Get battle statistics (placeholder for now)"""
-    # This would be enhanced with real battle statistics
+    """Get battle statistics"""
+    total_battles = db.query(func.count(BattleRoom.id)).scalar() or 0
+    active_battles = db.query(func.count(BattleRoom.id)).filter(BattleRoom.status == "active").scalar() or 0
+    completed_battles = db.query(func.count(BattleRoom.id)).filter(BattleRoom.status == "completed").scalar() or 0
     return {
-        "total_battles": 0,
-        "active_battles": 0,
-        "completed_battles": 0,
-        "message": "Battle statistics coming soon!"
+        "total_battles": total_battles,
+        "active_battles": active_battles,
+        "completed_battles": completed_battles,
     }
 
 @router.get("/{battle_id}/ai-result", response_model=AIBattleResultResponse)

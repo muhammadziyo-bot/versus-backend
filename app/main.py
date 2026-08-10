@@ -49,6 +49,8 @@ def run_schema_migration():
             conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false"))
             conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT false"))
             conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false"))
+            conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false"))
+            conn.execute(text("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP WITH TIME ZONE"))
             conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS score_status VARCHAR(50) DEFAULT 'pending'"))
             conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0"))
             conn.execute(text("ALTER TABLE ai_argument_scores ADD COLUMN IF NOT EXISTS error_message TEXT"))

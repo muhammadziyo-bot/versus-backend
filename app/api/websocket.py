@@ -52,7 +52,14 @@ class WebSocketManager:
         if user_id not in self.user_connections:
             self.user_connections[user_id] = {}
         self.user_connections[user_id][battle_room_id] = websocket
-        
+
+        # Mark user as online
+        from app.models.user import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if user and not user.is_online:
+            user.is_online = True
+            db.commit()
+
         # Send current battle state
         rounds = debate_service.get_battle_rounds(battle_room_id)
         votes = debate_service.get_battle_votes(battle_room_id)
@@ -178,6 +185,13 @@ class WebSocketManager:
             
             if not self.user_connections[user_id]:
                 del self.user_connections[user_id]
+                # No remaining connections anywhere - mark user offline
+                from app.models.user import User
+                user = db.query(User).filter(User.id == user_id).first()
+                if user and user.is_online:
+                    user.is_online = False
+                    user.last_seen = datetime.utcnow()
+                    db.commit()
 
     async def send_to_user(self, user_id: int, message: Dict[str, Any]):
         """Send a message to a specific user"""
@@ -418,6 +432,25 @@ class WebSocketManager:
         debate_service = DebateService(db)
         
         try:
+            battle = debate_service.get_battle_room(battle_room_id)
+            if not battle:
+                await self.send_to_user(user_id, {
+                    "type": "error",
+                    "data": {"message": "Battle room not found"},
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                return
+
+            # Only allow the battle to start once both users are connected
+            connected_users = self.battle_connections.get(battle_room_id, {})
+            if len(connected_users) < 2:
+                await self.send_to_user(user_id, {
+                    "type": "error",
+                    "data": {"message": "Your opponent hasn't joined the battle room yet. Please wait for them to accept the invitation and connect."},
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                return
+
             battle = debate_service.start_battle(battle_room_id)
             
             # Broadcast battle start

@@ -84,6 +84,7 @@ def search_users(
             "full_name": user.full_name,
             "avatar_url": user.avatar_url,
             "elo_rating": user.elo_rating or 400,
+            "is_online": user.is_online,
             "is_friend": bool(existing_friend),
             "friend_request_sent": bool(request_sent),
             "friend_request_received": bool(request_received)
@@ -271,6 +272,7 @@ def get_friends(
                 "friend_full_name": friend_user.full_name,
                 "friend_avatar_url": friend_user.avatar_url,
                 "friend_elo_rating": friend_user.elo_rating or 400,
+                "friend_is_online": friend_user.is_online,
                 "created_at": friend.created_at
             })
     
